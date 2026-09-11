@@ -1,0 +1,20 @@
+const router = require('express').Router();
+
+router.use('/auth', require('./auth.routes'));
+router.use('/clients', require('./client.routes'));
+router.use('/payments', require('./payment.routes'));
+router.use('/masters', require('./master.routes'));
+router.use('/admin/masters', require('./adminMaster.routes'));
+router.use('/chief-admin-users', require('./chiefAdminUser.routes'));
+router.use('/patients', require('./patient.routes'));
+router.use('/doctors', require('./doctor.routes'));
+router.use('/billing', require('./billing.routes'));
+router.use('/lab', require('./lab.routes'));
+router.use('/report-view', require('./reportView.routes'));
+router.use('/reports', require('./report.routes'));
+router.use('/tickets', require('./ticket.routes'));
+router.use('/branding', require('./branding.routes'));
+router.use('/notification-settings', require('./notificationSettings.routes'));
+router.use('/notification-templates', require('./notificationTemplate.routes'));
+
+module.exports = router;
