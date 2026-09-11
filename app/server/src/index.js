@@ -21,6 +21,16 @@ app.use('/uploads', express.static(UPLOAD_ROOT));
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 app.use('/api', routes);
 
+// In production the built React app (app/client/dist) is served by this same
+// process, so the whole thing is reachable at one URL - no separate static
+// host or CORS setup needed. Any path that isn't /api or /uploads falls
+// through to index.html so React Router can handle client-side routes.
+const CLIENT_DIST = path.join(__dirname, '..', '..', 'client', 'dist');
+if (fs.existsSync(CLIENT_DIST)) {
+  app.use(express.static(CLIENT_DIST));
+  app.get(/^(?!\/api|\/uploads).*/, (_req, res) => res.sendFile(path.join(CLIENT_DIST, 'index.html')));
+}
+
 app.use((err, _req, res, _next) => {
   console.error(err);
   res.status(err.status || 500).json({ message: err.message || 'Internal server error' });
