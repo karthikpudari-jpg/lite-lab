@@ -81,6 +81,7 @@ export default function AppHome() {
           <div className="home-hero-content">
             <p className="home-hero-eyebrow">
               <Icon name="building" size={15} /> {auth?.client?.clientName}
+              {auth?.client?.clientCode ? ` · ${auth.client.clientCode}` : ''}
             </p>
             <h1>{greeting(now.getHours())}, {auth?.user?.name || auth?.user?.username}</h1>
             <p className="home-hero-sub">{roles.join(' + ')} · Signed in as {auth?.user?.username}</p>
