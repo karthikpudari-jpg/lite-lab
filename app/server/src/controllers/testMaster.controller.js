@@ -3,6 +3,7 @@ const XLSX = require('xlsx');
 const { TestMaster, ParameterMaster, ParameterNormalRange } = require('../models');
 
 const GENDER_OPTIONS = ['Male', 'Female', 'Other', 'Any'];
+const AGE_UNIT_OPTIONS = ['Years', 'Months', 'Days'];
 
 // Chief Admin adds to the shared/universal catalog (clientId null, seen by
 // everyone) exactly as before; a client-side user's own parameter is scoped
@@ -48,6 +49,7 @@ async function createTest(req, res) {
         parameterCode: await generateParameterCode(p.parameterName),
         parameterName: p.parameterName,
         unit: p.unit,
+        method: p.method,
         normalRangeLow: p.normalRangeLow,
         normalRangeHigh: p.normalRangeHigh,
       });
@@ -82,7 +84,7 @@ async function updateTest(req, res) {
 }
 
 // POST /api/masters/tests/:testId/parameters
-// Body: { parameterName, unit, normalRangeLow, normalRangeHigh,
+// Body: { parameterName, unit, method, normalRangeLow, normalRangeHigh,
 //         normalRanges?: [{ gender, ageMin, ageMax, normalRangeLow, normalRangeHigh }] }
 // parameterCode is always generated here, never accepted from the caller.
 // normalRangeLow/High on the parameter itself are the default range, used
@@ -93,7 +95,7 @@ async function addParameter(req, res) {
   const test = await TestMaster.findByPk(req.params.testId);
   if (!test) return res.status(404).json({ message: 'Test not found' });
 
-  const { parameterName, unit, normalRangeLow, normalRangeHigh, normalRanges } = req.body;
+  const { parameterName, unit, method, normalRangeLow, normalRangeHigh, normalRanges } = req.body;
   if (!parameterName) return res.status(400).json({ message: 'parameterName is required' });
 
   if (normalRanges !== undefined) {
@@ -102,12 +104,25 @@ async function addParameter(req, res) {
       if (r.gender && !GENDER_OPTIONS.includes(r.gender)) {
         return res.status(400).json({ message: `Invalid gender "${r.gender}" - must be one of ${GENDER_OPTIONS.join(', ')}` });
       }
+      if (r.ageUnit && !AGE_UNIT_OPTIONS.includes(r.ageUnit)) {
+        return res.status(400).json({ message: `Invalid ageUnit "${r.ageUnit}" - must be one of ${AGE_UNIT_OPTIONS.join(', ')}` });
+      }
     }
   }
 
+  const clientId = requesterClientId(req);
+  // A parameter name is meant to be unique per test (per client scope) - a rapid double-click/double-submit
+  // of "Add Parameter" would otherwise create two identical rows. Return the existing one instead of erroring
+  // so a resubmit is a harmless no-op rather than a duplicate or a scary failure.
+  const existing = await ParameterMaster.findOne({
+    where: { testId: test.id, clientId, parameterName: { [Op.iLike]: parameterName } },
+    include: [ParameterNormalRange],
+  });
+  if (existing) return res.status(200).json(existing);
+
   const parameterCode = await generateParameterCode(parameterName);
   const parameter = await ParameterMaster.create({
-    testId: test.id, clientId: requesterClientId(req), parameterCode, parameterName, unit, normalRangeLow, normalRangeHigh,
+    testId: test.id, clientId, parameterCode, parameterName, unit, method, normalRangeLow, normalRangeHigh,
   });
 
   for (const r of normalRanges || []) {
@@ -116,6 +131,7 @@ async function addParameter(req, res) {
       gender: r.gender || 'Any',
       ageMin: r.ageMin === '' || r.ageMin == null ? null : Number(r.ageMin),
       ageMax: r.ageMax === '' || r.ageMax == null ? null : Number(r.ageMax),
+      ageUnit: r.ageUnit || 'Years',
       normalRangeLow: r.normalRangeLow,
       normalRangeHigh: r.normalRangeHigh,
     });
@@ -131,19 +147,42 @@ async function addNormalRange(req, res) {
   const parameter = await ParameterMaster.findByPk(req.params.parameterId);
   if (!parameter) return res.status(404).json({ message: 'Parameter not found' });
 
-  const { gender, ageMin, ageMax, normalRangeLow, normalRangeHigh } = req.body;
+  const { gender, ageMin, ageMax, ageUnit, normalRangeLow, normalRangeHigh } = req.body;
   if (gender && !GENDER_OPTIONS.includes(gender)) {
     return res.status(400).json({ message: `Invalid gender "${gender}" - must be one of ${GENDER_OPTIONS.join(', ')}` });
+  }
+  if (ageUnit && !AGE_UNIT_OPTIONS.includes(ageUnit)) {
+    return res.status(400).json({ message: `Invalid ageUnit "${ageUnit}" - must be one of ${AGE_UNIT_OPTIONS.join(', ')}` });
   }
   if (!normalRangeLow?.toString().trim() && !normalRangeHigh?.toString().trim()) {
     return res.status(400).json({ message: 'At least one of normalRangeLow/normalRangeHigh is required' });
   }
 
+  const normalizedAgeMin = ageMin === '' || ageMin == null ? null : Number(ageMin);
+  const normalizedAgeMax = ageMax === '' || ageMax == null ? null : Number(ageMax);
+  const normalizedAgeUnit = ageUnit || 'Years';
+
+  // Same defense-in-depth as addParameter above: a double-click/double-submit of "Add Range" would
+  // otherwise create two identical rule rows, so an exact-match resubmit returns the existing one instead.
+  const existing = await ParameterNormalRange.findOne({
+    where: {
+      parameterId: parameter.id,
+      gender: gender || 'Any',
+      ageMin: normalizedAgeMin,
+      ageMax: normalizedAgeMax,
+      ageUnit: normalizedAgeUnit,
+      normalRangeLow: normalRangeLow ?? null,
+      normalRangeHigh: normalRangeHigh ?? null,
+    },
+  });
+  if (existing) return res.status(200).json(existing);
+
   const range = await ParameterNormalRange.create({
     parameterId: parameter.id,
     gender: gender || 'Any',
-    ageMin: ageMin === '' || ageMin == null ? null : Number(ageMin),
-    ageMax: ageMax === '' || ageMax == null ? null : Number(ageMax),
+    ageMin: normalizedAgeMin,
+    ageMax: normalizedAgeMax,
+    ageUnit: normalizedAgeUnit,
     normalRangeLow, normalRangeHigh,
   });
   return res.status(201).json(range);
@@ -157,14 +196,15 @@ async function deleteNormalRange(req, res) {
   return res.json({ message: 'Deleted' });
 }
 
-// GET /api/admin/masters/tests/template  - a ready-to-fill Excel sheet, one row
-// per parameter (or one blank-parameter row for a test that has none yet), so
+// GET /api/admin/masters/tests/template  - a ready-to-fill Excel sheet covering
+// every parameter field (code excluded - that's always generated): unit,
+// method, default range, and one row per age/gender-specific range rule, so
 // re-downloading it after edits doubles as an up-to-date export.
 async function downloadTemplate(req, res) {
   // Chief-Admin-only endpoint - the export covers just the universal catalog,
   // never a client's own private parameters.
   const tests = await TestMaster.findAll({
-    include: [{ model: ParameterMaster, where: { clientId: null }, required: false }],
+    include: [{ model: ParameterMaster, where: { clientId: null }, required: false, include: [ParameterNormalRange] }],
     order: [['testCode', 'ASC']],
   });
 
@@ -172,18 +212,45 @@ async function downloadTemplate(req, res) {
   for (const t of tests) {
     const params = t.ParameterMasters || [];
     if (params.length === 0) {
-      rows.push({ TEST_CODE: t.testCode, TEST_NAME: t.testName, PARAMETER_NAME: '', UNIT: '', NORMAL_RANGE_LOW: '', NORMAL_RANGE_HIGH: '' });
-    } else {
-      for (const p of params) {
-        rows.push({
-          TEST_CODE: t.testCode, TEST_NAME: t.testName, PARAMETER_NAME: p.parameterName,
-          UNIT: p.unit || '', NORMAL_RANGE_LOW: p.normalRangeLow || '', NORMAL_RANGE_HIGH: p.normalRangeHigh || '',
-        });
+      rows.push({
+        TEST_CODE: t.testCode, TEST_NAME: t.testName, PARAMETER_NAME: '', UNIT: '', METHOD: '',
+        NORMAL_RANGE_LOW: '', NORMAL_RANGE_HIGH: '', GENDER: '', AGE_MIN: '', AGE_MAX: '', AGE_UNIT: '', RANGE_LOW: '', RANGE_HIGH: '',
+      });
+      continue;
+    }
+    for (const p of params) {
+      const base = {
+        TEST_CODE: t.testCode, TEST_NAME: t.testName, PARAMETER_NAME: p.parameterName,
+        UNIT: p.unit || '', METHOD: p.method || '', NORMAL_RANGE_LOW: p.normalRangeLow || '', NORMAL_RANGE_HIGH: p.normalRangeHigh || '',
+      };
+      const ranges = p.ParameterNormalRanges || [];
+      if (ranges.length === 0) {
+        rows.push({ ...base, GENDER: '', AGE_MIN: '', AGE_MAX: '', AGE_UNIT: '', RANGE_LOW: '', RANGE_HIGH: '' });
+      } else {
+        for (const r of ranges) {
+          rows.push({
+            ...base, GENDER: r.gender, AGE_MIN: r.ageMin ?? '', AGE_MAX: r.ageMax ?? '', AGE_UNIT: r.ageUnit || 'Years',
+            RANGE_LOW: r.normalRangeLow || '', RANGE_HIGH: r.normalRangeHigh || '',
+          });
+        }
       }
     }
   }
   if (rows.length === 0) {
-    rows.push({ TEST_CODE: 'CBC001', TEST_NAME: 'Complete Blood Count', PARAMETER_NAME: 'Hemoglobin', UNIT: 'g/dL', NORMAL_RANGE_LOW: '13', NORMAL_RANGE_HIGH: '17' });
+    rows.push(
+      {
+        TEST_CODE: 'CBC001', TEST_NAME: 'Complete Blood Count', PARAMETER_NAME: 'Hemoglobin', UNIT: 'g/dL', METHOD: 'Photometry',
+        NORMAL_RANGE_LOW: '13', NORMAL_RANGE_HIGH: '17', GENDER: '', AGE_MIN: '', AGE_MAX: '', AGE_UNIT: '', RANGE_LOW: '', RANGE_HIGH: '',
+      },
+      {
+        TEST_CODE: 'CBC001', TEST_NAME: 'Complete Blood Count', PARAMETER_NAME: 'Hemoglobin', UNIT: 'g/dL', METHOD: 'Photometry',
+        NORMAL_RANGE_LOW: '13', NORMAL_RANGE_HIGH: '17', GENDER: 'Male', AGE_MIN: '18', AGE_MAX: '60', AGE_UNIT: 'Years', RANGE_LOW: '13', RANGE_HIGH: '17',
+      },
+      {
+        TEST_CODE: 'CBC001', TEST_NAME: 'Complete Blood Count', PARAMETER_NAME: 'Hemoglobin', UNIT: 'g/dL', METHOD: 'Photometry',
+        NORMAL_RANGE_LOW: '13', NORMAL_RANGE_HIGH: '17', GENDER: 'Female', AGE_MIN: '18', AGE_MAX: '60', AGE_UNIT: 'Years', RANGE_LOW: '12', RANGE_HIGH: '15',
+      },
+    );
   }
 
   const sheet = XLSX.utils.json_to_sheet(rows);
@@ -197,10 +264,14 @@ async function downloadTemplate(req, res) {
 }
 
 /**
- * Parses an uploaded Excel/CSV of TEST_CODE, TEST_NAME, PARAMETER_NAME, UNIT,
- * NORMAL_RANGE_LOW, NORMAL_RANGE_HIGH rows and validates each, without writing
- * anything yet. One row per parameter; a row with no PARAMETER_NAME just
- * ensures the test itself exists. Step 1 of Preview -> Validate -> Commit.
+ * Parses an uploaded Excel/CSV and validates each row, without writing
+ * anything yet. Columns: TEST_CODE, TEST_NAME, PARAMETER_NAME, UNIT, METHOD,
+ * NORMAL_RANGE_LOW, NORMAL_RANGE_HIGH, GENDER, AGE_MIN, AGE_MAX, AGE_UNIT,
+ * RANGE_LOW, RANGE_HIGH. A row with no PARAMETER_NAME just ensures the test
+ * exists. A row whose RANGE_LOW/RANGE_HIGH are filled in adds an age/gender-
+ * specific rule to that parameter (multiple rows can target the same
+ * TEST_CODE+PARAMETER_NAME to add several rules). Step 1 of Preview ->
+ * Validate -> Commit.
  */
 async function previewUpload(req, res) {
   if (!req.file) return res.status(400).json({ message: 'Excel/CSV file is required' });
@@ -219,25 +290,44 @@ async function previewUpload(req, res) {
     const testName = String(r.TEST_NAME || '').trim();
     const parameterName = String(r.PARAMETER_NAME || '').trim();
     const unit = String(r.UNIT || '').trim();
+    const method = String(r.METHOD || '').trim();
     const normalRangeLow = String(r.NORMAL_RANGE_LOW || '').trim();
     const normalRangeHigh = String(r.NORMAL_RANGE_HIGH || '').trim();
+    const gender = String(r.GENDER || '').trim();
+    const ageMin = String(r.AGE_MIN ?? '').trim();
+    const ageMax = String(r.AGE_MAX ?? '').trim();
+    const ageUnit = String(r.AGE_UNIT || '').trim();
+    const rangeLow = String(r.RANGE_LOW || '').trim();
+    const rangeHigh = String(r.RANGE_HIGH || '').trim();
+    const hasRangeRule = !!(rangeLow || rangeHigh);
 
     const errors = [];
     if (!testCode) errors.push('TEST_CODE is missing');
     if (!testName) errors.push('TEST_NAME is missing');
+    if (hasRangeRule && !parameterName) errors.push('PARAMETER_NAME is required to add an age/gender range');
+    if (gender && !GENDER_OPTIONS.includes(gender)) errors.push(`GENDER must be one of ${GENDER_OPTIONS.join(', ')}`);
+    if (ageUnit && !AGE_UNIT_OPTIONS.includes(ageUnit)) errors.push(`AGE_UNIT must be one of ${AGE_UNIT_OPTIONS.join(', ')}`);
 
     const existingTest = testByCode.get(testCode);
     const isNewTest = !existingTest;
     const paramAlreadyExists = !isNewTest && parameterName
       && existingTest.ParameterMasters.some((p) => p.parameterName.toLowerCase() === parameterName.toLowerCase());
 
+    let action;
+    if (hasRangeRule) {
+      action = `Add ${gender || 'Any'} range rule${paramAlreadyExists ? '' : ' (+ new parameter)'}`;
+    } else if (parameterName) {
+      action = paramAlreadyExists ? 'Parameter already exists — skipped' : (isNewTest ? 'New test + parameter' : 'Add parameter');
+    } else {
+      action = isNewTest ? 'New test (no parameter)' : 'Test already exists';
+    }
+
     return {
       row: idx + 2, // account for header row
-      testCode, testName, parameterName, unit, normalRangeLow, normalRangeHigh,
+      testCode, testName, parameterName, unit, method, normalRangeLow, normalRangeHigh,
+      gender, ageMin, ageMax, ageUnit, rangeLow, rangeHigh,
       isNewTest,
-      action: parameterName
-        ? (paramAlreadyExists ? 'Parameter already exists — skipped' : (isNewTest ? 'New test + parameter' : 'Add parameter'))
-        : (isNewTest ? 'New test (no parameter)' : 'Test already exists'),
+      action,
       valid: errors.length === 0,
       errors,
     };
@@ -251,14 +341,15 @@ async function previewUpload(req, res) {
   });
 }
 
-// POST /api/admin/masters/tests/upload/commit  { rows: [{ testCode, testName, parameterName, unit, normalRangeLow, normalRangeHigh }] }
+// POST /api/admin/masters/tests/upload/commit  { rows: [{ testCode, testName, parameterName, unit,
+//   method, normalRangeLow, normalRangeHigh, gender, ageMin, ageMax, ageUnit, rangeLow, rangeHigh }] }
 async function commitUpload(req, res) {
   const { rows } = req.body;
   if (!Array.isArray(rows) || rows.length === 0) {
     return res.status(400).json({ message: 'rows array is required' });
   }
 
-  const results = { testsCreated: 0, parametersAdded: 0, skipped: 0, errors: [] };
+  const results = { testsCreated: 0, parametersAdded: 0, rangesAdded: 0, skipped: 0, errors: [] };
   for (const row of rows) {
     const testCode = String(row.testCode || '').trim();
     const testName = String(row.testName || '').trim();
@@ -271,15 +362,32 @@ async function commitUpload(req, res) {
     if (testCreated) results.testsCreated += 1;
 
     const parameterName = String(row.parameterName || '').trim();
-    if (parameterName) {
-      const [, paramCreated] = await ParameterMaster.findOrCreate({
-        where: { testId: test.id, parameterName, clientId: null },
-        defaults: {
-          parameterCode: await generateParameterCode(parameterName),
-          unit: row.unit, normalRangeLow: row.normalRangeLow, normalRangeHigh: row.normalRangeHigh,
+    if (!parameterName) continue;
+
+    const [parameter, paramCreated] = await ParameterMaster.findOrCreate({
+      where: { testId: test.id, parameterName, clientId: null },
+      defaults: {
+        parameterCode: await generateParameterCode(parameterName),
+        unit: row.unit, method: row.method, normalRangeLow: row.normalRangeLow, normalRangeHigh: row.normalRangeHigh,
+      },
+    });
+    const hasRangeRule = !!(String(row.rangeLow || '').trim() || String(row.rangeHigh || '').trim());
+    if (paramCreated) results.parametersAdded += 1;
+    else if (!hasRangeRule) results.skipped += 1;
+
+    if (hasRangeRule) {
+      const gender = String(row.gender || '').trim() || 'Any';
+      const ageUnit = String(row.ageUnit || '').trim() || 'Years';
+      const ageMin = row.ageMin === '' || row.ageMin == null ? null : Number(row.ageMin);
+      const ageMax = row.ageMax === '' || row.ageMax == null ? null : Number(row.ageMax);
+      const [, rangeCreated] = await ParameterNormalRange.findOrCreate({
+        where: {
+          parameterId: parameter.id, gender, ageMin, ageMax, ageUnit,
+          normalRangeLow: row.rangeLow || null, normalRangeHigh: row.rangeHigh || null,
         },
+        defaults: {},
       });
-      if (paramCreated) results.parametersAdded += 1;
+      if (rangeCreated) results.rangesAdded += 1;
       else results.skipped += 1;
     }
   }
