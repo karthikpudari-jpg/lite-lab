@@ -50,21 +50,36 @@ export default function BillPrint() {
         </div>
 
         <table style={{ marginTop: 24 }}>
-          <thead><tr><th>Test</th><th>Barcode</th><th>Price</th></tr></thead>
+          <thead><tr><th>Test</th><th>Barcode</th><th>Price</th><th>Status</th><th>Refunded</th></tr></thead>
           <tbody>
-            {bill.BillItems.map((item) => (
-              <tr key={item.id}>
-                <td>{item.TestMaster?.testName}</td>
-                <td>{item.Sample?.barcode}</td>
-                <td>₹{item.price}</td>
-              </tr>
-            ))}
+            {bill.BillItems.map((item) => {
+              const refunded = (item.Refunds || []).reduce((sum, r) => sum + Number(r.amount), 0);
+              return (
+                <tr key={item.id}>
+                  <td style={item.status === 'CANCELLED' ? { textDecoration: 'line-through', color: '#94a3b8' } : undefined}>
+                    {item.TestMaster?.testName}
+                  </td>
+                  <td>{item.Sample?.barcode}</td>
+                  <td>₹{item.price}</td>
+                  <td>{item.status === 'CANCELLED' ? 'Cancelled' : 'Active'}</td>
+                  <td>{refunded > 0 ? `₹${refunded.toFixed(2)}` : '—'}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
         <div className="report-patient-grid" style={{ marginTop: 16 }}>
           <div><span>Gross</span><strong>₹{bill.totalAmount}</strong></div>
           <div><span>Discount</span><strong>₹{bill.discount}</strong></div>
+          {(() => {
+            const totalRefunded = bill.BillItems.reduce(
+              (sum, item) => sum + (item.Refunds || []).reduce((s, r) => s + Number(r.amount), 0), 0,
+            );
+            return totalRefunded > 0 ? (
+              <div><span>Cancelled / Refunded</span><strong>₹{totalRefunded.toFixed(2)}</strong></div>
+            ) : null;
+          })()}
           <div><span>Net Payable</span><strong>₹{bill.paidAmount}</strong></div>
         </div>
         {bill.remarks && <p style={{ marginTop: 16 }}><strong>Remarks:</strong> {bill.remarks}</p>}
