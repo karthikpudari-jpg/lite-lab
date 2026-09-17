@@ -26,7 +26,7 @@ export const SCREEN_CATALOG = [
 export const DEFAULT_ROLE_SCREENS = {
   FRONT_OFFICE: ['billing', 'orders'],
   LAB_USER: ['lab'],
-  MANAGER: ['reports', 'tickets', 'report-branding', 'payor-invoices', 'test-parameters'],
+  MANAGER: ['reports', 'tickets', 'report-branding', 'payor-invoices', 'test-parameters', 'orders'],
   MASTER_MANAGER: ['masters', 'payors'],
 };
 

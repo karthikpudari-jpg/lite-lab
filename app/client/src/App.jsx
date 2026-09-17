@@ -60,7 +60,7 @@ export default function App() {
         <Route path="payors" element={<ProtectedRoute type="CLIENT_USER" roles={['MASTER_MANAGER']}><Payors /></ProtectedRoute>} />
         <Route path="tickets" element={<Tickets />} />
         <Route path="billing" element={<ProtectedRoute type="CLIENT_USER" roles={['FRONT_OFFICE']}><FrontDesk /></ProtectedRoute>} />
-        <Route path="orders" element={<ProtectedRoute type="CLIENT_USER" roles={['FRONT_OFFICE']}><Orders /></ProtectedRoute>} />
+        <Route path="orders" element={<ProtectedRoute type="CLIENT_USER" roles={['FRONT_OFFICE', 'MANAGER']}><Orders /></ProtectedRoute>} />
         <Route path="billing/print/:billId" element={<ProtectedRoute type="CLIENT_USER" roles={['FRONT_OFFICE']}><BillPrint /></ProtectedRoute>} />
         <Route path="lab" element={<ProtectedRoute type="CLIENT_USER" roles={['LAB_USER']}><Laboratory /></ProtectedRoute>} />
         <Route path="report/:billId" element={<ProtectedRoute type="CLIENT_USER" roles={['LAB_USER', 'FRONT_OFFICE', 'MANAGER']}><LabReport /></ProtectedRoute>} />

@@ -8,9 +8,16 @@ const REFUND_MODES = ['Cash', 'Card', 'UPI', 'Insurance'];
 export default function Orders() {
   const navigate = useNavigate();
   const { auth } = useAuth();
-  const canCancelRefund = !!auth?.client?.allowBillCancellationRefund;
+  const canConfigure = auth?.user?.roles?.includes('ADMIN') || auth?.user?.roles?.includes('MANAGER');
+  const [settings, setSettings] = useState(null); // { allowBillCancellationRefund }
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState('');
+
   const [bills, setBills] = useState([]);
   const [search, setSearch] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const [refundBill, setRefundBill] = useState(null); // the bill row being cancelled/refunded
   const [refundItem, setRefundItem] = useState(null); // which test within that bill
   const [refundForm, setRefundForm] = useState({ amount: '', mode: 'Cash', reason: '' });
@@ -22,16 +29,37 @@ export default function Orders() {
     setBills(data);
     return data;
   }
-  useEffect(() => { load(); }, []);
+  async function loadSettings() {
+    const { data } = await api.get('/billing-settings');
+    setSettings(data);
+  }
+  useEffect(() => { load(); loadSettings(); }, []);
 
   const filtered = bills.filter((b) => {
     const q = search.toLowerCase();
-    if (!q) return true;
-    return b.billNo.toLowerCase().includes(q)
+    const matchesSearch = !q
+      || b.billNo.toLowerCase().includes(q)
       || b.patient?.name?.toLowerCase().includes(q)
       || b.patient?.umr?.toLowerCase().includes(q)
       || b.patient?.mobile?.includes(q);
+    const matchesFrom = !fromDate || b.walkInDate >= fromDate;
+    const matchesTo = !toDate || b.walkInDate <= toDate;
+    return matchesSearch && matchesFrom && matchesTo;
   });
+
+  async function toggleSetting() {
+    setSettingsSaving(true);
+    setSettingsMessage('');
+    try {
+      const { data } = await api.put('/billing-settings', { allowBillCancellationRefund: !settings.allowBillCancellationRefund });
+      setSettings(data);
+      setSettingsMessage(data.allowBillCancellationRefund ? 'Cancellation & Refund is now enabled.' : 'Cancellation & Refund is now disabled.');
+    } catch (err) {
+      setSettingsMessage(err.response?.data?.message || 'Failed to update setting');
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
 
   function openRefundModal(bill) {
     setRefundBill(bill);
@@ -71,7 +99,17 @@ export default function Orders() {
     <div className="card">
       <div className="topbar">
         <h3 style={{ margin: 0 }}>Orders</h3>
-        <input placeholder="Search by Order ID, UMR, name or mobile…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 280, maxWidth: '100%' }} />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}>
+            From <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+          </label>
+          <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}>
+            To <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          </label>
+          {(fromDate || toDate) && <button type="button" onClick={() => { setFromDate(''); setToDate(''); }}>Clear dates</button>}
+          <input placeholder="Search by Order ID, UMR, name or mobile…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 260, maxWidth: '100%' }} />
+          {canConfigure && <button type="button" onClick={() => setShowSettings(true)}>⚙ Settings</button>}
+        </div>
       </div>
       <table>
         <thead>
@@ -103,7 +141,7 @@ export default function Orders() {
                 <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   <button onClick={() => navigate(`/app/billing/print/${b.id}`)}>Print Bill</button>
                   <button disabled={!anyReleased} onClick={() => navigate(`/app/report/${b.id}`)}>Print Report</button>
-                  {canCancelRefund && <button onClick={() => openRefundModal(b)}>Cancel / Refund</button>}
+                  {settings?.allowBillCancellationRefund && <button onClick={() => openRefundModal(b)}>Cancel / Refund</button>}
                 </td>
               </tr>
             );
@@ -111,6 +149,35 @@ export default function Orders() {
           {filtered.length === 0 && <tr><td colSpan={8}>No orders found.</td></tr>}
         </tbody>
       </table>
+
+      {showSettings && (
+        <div className="modal-overlay">
+          <div className="modal-card" style={{ maxWidth: 420 }}>
+            <h2>Orders Settings</h2>
+            <p style={{ fontSize: 13, color: '#64748b' }}>
+              Available to Admin and Manager. Controls whether Front Office can cancel a billed test and
+              record a refund against it, from this same Orders screen.
+            </p>
+            {settings ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
+                <div>
+                  <strong>Bill Cancellation & Refund</strong>
+                  <div style={{ fontSize: 12, color: '#64748b' }}>
+                    Currently {settings.allowBillCancellationRefund ? 'enabled' : 'disabled'} for this clinic.
+                  </div>
+                </div>
+                <button type="button" onClick={toggleSetting} disabled={settingsSaving}>
+                  {settingsSaving ? 'Saving…' : settings.allowBillCancellationRefund ? 'Disable' : 'Enable'}
+                </button>
+              </div>
+            ) : <p>Loading…</p>}
+            {settingsMessage && <p style={{ fontSize: 13, color: '#166534' }}>{settingsMessage}</p>}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+              <button type="button" onClick={() => setShowSettings(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {refundBill && (
         <div className="modal-overlay">

@@ -10,6 +10,7 @@ router.use('/chief-admin-users', require('./chiefAdminUser.routes'));
 router.use('/patients', require('./patient.routes'));
 router.use('/doctors', require('./doctor.routes'));
 router.use('/billing', require('./billing.routes'));
+router.use('/billing-settings', require('./billingSettings.routes'));
 router.use('/lab', require('./lab.routes'));
 router.use('/report-view', require('./reportView.routes'));
 router.use('/reports', require('./report.routes'));

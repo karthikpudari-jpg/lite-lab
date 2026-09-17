@@ -263,6 +263,24 @@ async function listPayorTestPrices(req, res) {
   return res.json(prices);
 }
 
+// GET /api/billing-settings  (current client's own cancellation/refund toggle)
+async function getBillingSettings(req, res) {
+  const client = await Client.findByPk(req.user.clientId);
+  return res.json({ allowBillCancellationRefund: client.allowBillCancellationRefund });
+}
+
+// PUT /api/billing-settings  (Admin/Manager self-service - no Chief Admin needed)
+async function updateBillingSettings(req, res) {
+  const client = await Client.findByPk(req.user.clientId);
+  const { allowBillCancellationRefund } = req.body;
+  if (typeof allowBillCancellationRefund !== 'boolean') {
+    return res.status(400).json({ message: 'allowBillCancellationRefund must be true or false' });
+  }
+  await client.update({ allowBillCancellationRefund });
+  return res.json({ allowBillCancellationRefund: client.allowBillCancellationRefund });
+}
+
 module.exports = {
   createBill, getBill, listBills, listTestPrices, listPayors, listPayorTestPrices, cancelBillItem,
+  getBillingSettings, updateBillingSettings,
 };

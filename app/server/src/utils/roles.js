@@ -32,7 +32,7 @@ const CONFIGURABLE_ROLES = [ROLES.FRONT_OFFICE, ROLES.LAB_USER, ROLES.MANAGER, R
 const BUILTIN_ROLE_SCREEN_DEFAULTS = {
   FRONT_OFFICE: ['billing', 'orders'],
   LAB_USER: ['lab'],
-  MANAGER: ['reports', 'tickets', 'report-branding', 'payor-invoices', 'test-parameters'],
+  MANAGER: ['reports', 'tickets', 'report-branding', 'payor-invoices', 'test-parameters', 'orders'],
   MASTER_MANAGER: ['masters', 'payors'],
 };
 
