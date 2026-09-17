@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { Icon } from '../../components/Icons';
+import ReviewResults from './ReviewResults';
 
 const RESULT_ENTRY_STATUSES = ['COLLECTED', 'RESULT_ENTERED', 'VERIFIED'];
 
@@ -31,10 +32,8 @@ export default function Laboratory() {
   const [samples, setSamples] = useState([]);
   const [statusFilter, setStatusFilter] = useState('');
   const [expandedBillId, setExpandedBillId] = useState(null);
-  const [activeSample, setActiveSample] = useState(null);
-  const [resultValues, setResultValues] = useState({});
-  const [bulkSamples, setBulkSamples] = useState(null); // array of samples being entered together
-  const [bulkValues, setBulkValues] = useState({});
+  const [reviewGroup, setReviewGroup] = useState(null); // bill group open in the full-screen Review Results panel
+  const [reviewFocusId, setReviewFocusId] = useState(null); // which test within it starts focused
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -52,7 +51,6 @@ export default function Laboratory() {
     setBusy(true);
     try {
       await api.post(`/lab/samples/${sample.id}/${action}`);
-      if (activeSample?.id === sample.id) setActiveSample(null);
       await load();
     } catch (err) {
       setError(err.response?.data?.message || 'Action failed');
@@ -61,79 +59,13 @@ export default function Laboratory() {
     }
   }
 
-  function openResultEntry(sample) {
-    setActiveSample(sample);
-    const initial = {};
-    for (const r of sample.Results || []) initial[r.parameterId] = r.value;
-    setResultValues(initial);
-  }
-
-  async function submitResults(e) {
-    e.preventDefault();
-    if (busy) return;
-    setError('');
-    setBusy(true);
-    const parameters = activeSample.BillItem?.TestMaster?.ParameterMasters || [];
-    const results = parameters.map((p) => ({ parameterId: p.id, value: resultValues[p.id] || '' }));
-    try {
-      await api.post(`/lab/samples/${activeSample.id}/results`, { results });
-      setActiveSample(null);
-      await load();
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to save results');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // --- Bulk entry: enter results for every eligible test on a patient's bill in one screen. ---
-  function openBulkResultEntry(group) {
-    const eligible = group.samples.filter((s) => RESULT_ENTRY_STATUSES.includes(s.status));
-    setBulkSamples(eligible);
-    const initial = {};
-    for (const s of eligible) {
-      initial[s.id] = {};
-      for (const r of s.Results || []) initial[s.id][r.parameterId] = r.value;
-    }
-    setBulkValues(initial);
-  }
-
-  async function submitBulkResults(e) {
-    e.preventDefault();
-    if (busy) return;
-    setError('');
-    setBusy(true);
-    try {
-      for (const s of bulkSamples) {
-        const parameters = s.BillItem?.TestMaster?.ParameterMasters || [];
-        const results = parameters.map((p) => ({ parameterId: p.id, value: bulkValues[s.id]?.[p.id] || '' }));
-        await api.post(`/lab/samples/${s.id}/results`, { results });
-      }
-      setBulkSamples(null);
-      await load();
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to save one or more results');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // --- Bulk verify: verify every RESULT_ENTERED test on a patient's bill in one click. ---
-  async function verifyAll(group) {
-    if (busy) return;
-    setError('');
-    setBusy(true);
-    const eligible = group.samples.filter((s) => s.status === 'RESULT_ENTERED');
-    try {
-      for (const s of eligible) {
-        await api.post(`/lab/samples/${s.id}/verify`);
-      }
-      await load();
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to verify one or more tests');
-    } finally {
-      setBusy(false);
-    }
+  // Results entry AND verify both open the same Review Results screen - "enter
+  // a value" and "confirm a value" are really the same review, just at a
+  // different point, so one screen (checkbox-select which tests, edit inline,
+  // then Save/Mark Reviewed) covers both instead of two different modals.
+  function openReview(group, focusSampleId = null) {
+    setReviewGroup(group);
+    setReviewFocusId(focusSampleId);
   }
 
   return (
@@ -153,7 +85,6 @@ export default function Laboratory() {
           const expanded = expandedBillId === g.billId;
           const releasedCount = g.samples.filter((s) => s.status === 'RELEASED').length;
           const resultEntryCount = g.samples.filter((s) => RESULT_ENTRY_STATUSES.includes(s.status)).length;
-          const verifyCount = g.samples.filter((s) => s.status === 'RESULT_ENTERED').length;
           return (
             <div className={`card lab-card ${overallStatusClass(g.samples)}`} key={g.billId} style={{ marginBottom: 0 }}>
               <div
@@ -180,18 +111,11 @@ export default function Laboratory() {
 
               {expanded && (
                 <>
-                  {g.samples.length > 1 && (resultEntryCount > 0 || verifyCount > 0) && (
+                  {g.samples.length > 1 && resultEntryCount > 0 && (
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-                      {resultEntryCount > 0 && (
-                        <button onClick={() => openBulkResultEntry(g)} disabled={busy}>
-                          Enter All Results ({resultEntryCount})
-                        </button>
-                      )}
-                      {verifyCount > 0 && (
-                        <button className="secondary" onClick={() => verifyAll(g)} disabled={busy}>
-                          {busy ? 'Verifying…' : `Verify All (${verifyCount})`}
-                        </button>
-                      )}
+                      <button onClick={() => openReview(g)} disabled={busy}>
+                        Review Results ({resultEntryCount})
+                      </button>
                     </div>
                   )}
                   <table style={{ marginTop: 12 }}>
@@ -204,9 +128,10 @@ export default function Laboratory() {
                           <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                             {s.status === 'PENDING_COLLECTION' && <button onClick={() => doAction(s, 'collect')} disabled={busy}>Collect</button>}
                             {RESULT_ENTRY_STATUSES.includes(s.status) && (
-                              <button onClick={() => openResultEntry(s)} disabled={busy}>Results</button>
+                              <button onClick={() => openReview(g, s.id)} disabled={busy}>
+                                {s.status === 'RESULT_ENTERED' ? 'Verify' : 'Results'}
+                              </button>
                             )}
-                            {s.status === 'RESULT_ENTERED' && <button onClick={() => doAction(s, 'verify')} disabled={busy}>{busy ? 'Verifying…' : 'Verify'}</button>}
                             {s.status === 'VERIFIED' && <button onClick={() => doAction(s, 'release')} disabled={busy}>Release</button>}
                           </td>
                         </tr>
@@ -221,64 +146,13 @@ export default function Laboratory() {
         {groups.length === 0 && <p>No samples.</p>}
       </div>
 
-      {activeSample && (
-        <div className="modal-overlay" onClick={() => setActiveSample(null)}>
-          <div className="modal-card" style={{ textAlign: 'left', width: 420 }} onClick={(e) => e.stopPropagation()}>
-            <h3>Result Entry — {activeSample.BillItem?.TestMaster?.testName}</h3>
-            <form onSubmit={submitResults}>
-              {(activeSample.BillItem?.TestMaster?.ParameterMasters || []).map((p) => (
-                <label key={p.id}>
-                  <span>{p.parameterCode ? `[${p.parameterCode}] ` : ''}{p.parameterName} ({p.unit}) — Normal: {p.normalRangeLow}-{p.normalRangeHigh}</span>
-                  <input
-                    value={resultValues[p.id] || ''}
-                    onChange={(e) => setResultValues((v) => ({ ...v, [p.id]: e.target.value }))}
-                    required
-                  />
-                </label>
-              ))}
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                <button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save Results'}</button>
-                {activeSample.status === 'RESULT_ENTERED' && (
-                  <button type="button" onClick={() => doAction(activeSample, 'verify')} disabled={busy}>
-                    {busy ? 'Verifying…' : 'Verify'}
-                  </button>
-                )}
-                <button type="button" className="secondary" onClick={() => setActiveSample(null)} disabled={busy}>Cancel</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {bulkSamples && (
-        <div className="modal-overlay" onClick={() => setBulkSamples(null)}>
-          <div className="modal-card" style={{ textAlign: 'left', width: 480, maxHeight: '85vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            <h3>Enter All Results ({bulkSamples.length} test{bulkSamples.length > 1 ? 's' : ''})</h3>
-            <form onSubmit={submitBulkResults}>
-              {bulkSamples.map((s) => (
-                <div key={s.id} style={{ marginBottom: 16 }}>
-                  <h4 style={{ background: '#f1f5f9', padding: '6px 10px', borderRadius: 6, marginBottom: 8 }}>
-                    {s.BillItem?.TestMaster?.testName}
-                  </h4>
-                  {(s.BillItem?.TestMaster?.ParameterMasters || []).map((p) => (
-                    <label key={p.id}>
-                      <span>{p.parameterCode ? `[${p.parameterCode}] ` : ''}{p.parameterName} ({p.unit}) — Normal: {p.normalRangeLow}-{p.normalRangeHigh}</span>
-                      <input
-                        value={bulkValues[s.id]?.[p.id] || ''}
-                        onChange={(e) => setBulkValues((v) => ({ ...v, [s.id]: { ...v[s.id], [p.id]: e.target.value } }))}
-                        required
-                      />
-                    </label>
-                  ))}
-                </div>
-              ))}
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                <button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save All Results'}</button>
-                <button type="button" className="secondary" onClick={() => setBulkSamples(null)} disabled={busy}>Cancel</button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {reviewGroup && (
+        <ReviewResults
+          group={reviewGroup}
+          focusSampleId={reviewFocusId}
+          onClose={() => setReviewGroup(null)}
+          onSaved={() => { setReviewGroup(null); load(); }}
+        />
       )}
     </div>
   );
