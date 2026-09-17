@@ -263,7 +263,7 @@ input, select, textarea {
 }
 .home-hero-content { flex: 1 1 320px; }
 .home-hero-expiry { flex: 0 0 auto; text-align: center; padding-left: 24px; }
-.home-hero-expiry-value { font-size: 44px; font-weight: 800; line-height: 1; text-shadow: 0 0 18px currentColor; }
+.home-hero-expiry-value { font-size: 44px; font-weight: 800; line-height: 1; }
 .home-hero-expiry-label {
   margin-top: 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
   color: #b7c3e0;

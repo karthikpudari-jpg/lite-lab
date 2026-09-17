@@ -106,6 +106,9 @@ const Client = sequelize.define('Client', {
   // that can be given at the time of billing itself. Off by default, like
   // allowBillCancellationRefund - it also touches money already collected.
   allowPostBillingDiscount: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+  // How many days after the bill's walk-in date a post-billing discount stays
+  // allowed. 0 means no limit. Only meaningful when allowPostBillingDiscount is on.
+  postDiscountAllowedDays: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
   ...AUDIT_FIELDS,
 }, { tableName: 'client' });
 

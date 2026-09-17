@@ -9,8 +9,8 @@ export default function Orders() {
   const navigate = useNavigate();
   const { auth } = useAuth();
   const canConfigure = auth?.user?.roles?.includes('ADMIN') || auth?.user?.roles?.includes('MANAGER');
-  const [settings, setSettings] = useState(null); // { allowBillCancellationRefund, refundAllowedDays, allowPostBillingDiscount }
-  const [settingsForm, setSettingsForm] = useState({ refundAllowedDays: '0' });
+  const [settings, setSettings] = useState(null); // { allowBillCancellationRefund, refundAllowedDays, allowPostBillingDiscount, postDiscountAllowedDays }
+  const [settingsForm, setSettingsForm] = useState({ refundAllowedDays: '0', postDiscountAllowedDays: '0' });
   const [showSettings, setShowSettings] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState('');
@@ -38,7 +38,10 @@ export default function Orders() {
   async function loadSettings() {
     const { data } = await api.get('/billing-settings');
     setSettings(data);
-    setSettingsForm({ refundAllowedDays: String(data.refundAllowedDays ?? 0) });
+    setSettingsForm({
+      refundAllowedDays: String(data.refundAllowedDays ?? 0),
+      postDiscountAllowedDays: String(data.postDiscountAllowedDays ?? 0),
+    });
   }
   useEffect(() => { load(); loadSettings(); }, []);
 
@@ -68,17 +71,17 @@ export default function Orders() {
     }
   }
 
-  async function saveRefundAllowedDays(e) {
+  async function saveDaysLimit(e, key, label) {
     e.preventDefault();
     setSettingsSaving(true);
     setSettingsMessage('');
     try {
-      const { data } = await api.put('/billing-settings', { refundAllowedDays: Number(settingsForm.refundAllowedDays) || 0 });
+      const { data } = await api.put('/billing-settings', { [key]: Number(settingsForm[key]) || 0 });
       setSettings(data);
       setSettingsMessage(
-        data.refundAllowedDays > 0
-          ? `Cancellation & refund now allowed within ${data.refundAllowedDays} day(s) of billing.`
-          : 'Cancellation & refund now allowed with no day limit.',
+        data[key] > 0
+          ? `${label} now allowed within ${data[key]} day(s) of billing.`
+          : `${label} now allowed with no day limit.`,
       );
     } catch (err) {
       setSettingsMessage(err.response?.data?.message || 'Failed to update setting');
@@ -227,7 +230,7 @@ export default function Orders() {
                 </div>
 
                 <form
-                  onSubmit={saveRefundAllowedDays}
+                  onSubmit={(e) => saveDaysLimit(e, 'refundAllowedDays', 'Cancellation & refund')}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}
                 >
                   <div>
@@ -240,7 +243,7 @@ export default function Orders() {
                     <input
                       type="number" min="0" step="1" style={{ width: 70 }}
                       value={settingsForm.refundAllowedDays}
-                      onChange={(e) => setSettingsForm({ refundAllowedDays: e.target.value })}
+                      onChange={(e) => setSettingsForm((f) => ({ ...f, refundAllowedDays: e.target.value }))}
                     />
                     <button type="submit" disabled={settingsSaving}>Save</button>
                   </div>
@@ -257,6 +260,26 @@ export default function Orders() {
                     {settingsSaving ? 'Saving…' : settings.allowPostBillingDiscount ? 'Disable' : 'Enable'}
                   </button>
                 </div>
+
+                <form
+                  onSubmit={(e) => saveDaysLimit(e, 'postDiscountAllowedDays', 'Post-billing discount')}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}
+                >
+                  <div>
+                    <strong>Post-Billing Discount Allowed Days</strong>
+                    <div style={{ fontSize: 12, color: '#64748b' }}>
+                      How many days after billing an extra discount can still be applied. 0 = no limit.
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      type="number" min="0" step="1" style={{ width: 70 }}
+                      value={settingsForm.postDiscountAllowedDays}
+                      onChange={(e) => setSettingsForm((f) => ({ ...f, postDiscountAllowedDays: e.target.value }))}
+                    />
+                    <button type="submit" disabled={settingsSaving}>Save</button>
+                  </div>
+                </form>
               </div>
             ) : <p>Loading…</p>}
             {settingsMessage && <p style={{ fontSize: 13, color: '#166534' }}>{settingsMessage}</p>}

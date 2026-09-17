@@ -237,6 +237,15 @@ async function applyPostBillingDiscount(req, res) {
   const bill = await Bill.findOne({ where: { id: billId, clientId } });
   if (!bill) return res.status(404).json({ message: 'Bill not found' });
 
+  if (client.postDiscountAllowedDays > 0 && bill.walkInDate) {
+    const daysSinceBilling = Math.floor((Date.now() - new Date(bill.walkInDate).getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSinceBilling > client.postDiscountAllowedDays) {
+      return res.status(400).json({
+        message: `Post-billing discount is only allowed within ${client.postDiscountAllowedDays} day(s) of billing. This bill was made ${daysSinceBilling} day(s) ago.`,
+      });
+    }
+  }
+
   if (discountAmount > Number(bill.paidAmount)) {
     return res.status(400).json({ message: `Discount cannot exceed ₹${Number(bill.paidAmount).toFixed(2)} remaining on this bill` });
   }
@@ -329,13 +338,14 @@ async function getBillingSettings(req, res) {
     allowBillCancellationRefund: client.allowBillCancellationRefund,
     refundAllowedDays: client.refundAllowedDays,
     allowPostBillingDiscount: client.allowPostBillingDiscount,
+    postDiscountAllowedDays: client.postDiscountAllowedDays,
   });
 }
 
 // PUT /api/billing-settings  (Admin/Manager self-service - no Chief Admin needed)
 async function updateBillingSettings(req, res) {
   const client = await Client.findByPk(req.user.clientId);
-  const { allowBillCancellationRefund, refundAllowedDays, allowPostBillingDiscount } = req.body;
+  const { allowBillCancellationRefund, refundAllowedDays, allowPostBillingDiscount, postDiscountAllowedDays } = req.body;
 
   const updates = {};
   if (allowBillCancellationRefund !== undefined) {
@@ -357,12 +367,20 @@ async function updateBillingSettings(req, res) {
     }
     updates.allowPostBillingDiscount = allowPostBillingDiscount;
   }
+  if (postDiscountAllowedDays !== undefined) {
+    const days = Number(postDiscountAllowedDays);
+    if (!Number.isInteger(days) || days < 0) {
+      return res.status(400).json({ message: 'postDiscountAllowedDays must be a whole number of 0 or more' });
+    }
+    updates.postDiscountAllowedDays = days;
+  }
 
   await client.update(updates);
   return res.json({
     allowBillCancellationRefund: client.allowBillCancellationRefund,
     refundAllowedDays: client.refundAllowedDays,
     allowPostBillingDiscount: client.allowPostBillingDiscount,
+    postDiscountAllowedDays: client.postDiscountAllowedDays,
   });
 }
 
