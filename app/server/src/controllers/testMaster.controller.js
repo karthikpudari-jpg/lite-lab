@@ -11,6 +11,22 @@ function requesterClientId(req) {
   return req.user?.type === 'CLIENT_USER' ? req.user.clientId : null;
 }
 
+// Parameter codes are always system-generated, never typed in - a short
+// letters-only prefix from the parameter name (e.g. "Hemoglobin" -> "HEMO"),
+// plus a zero-padded number bumped up until it's unique. Used identically
+// from both the client-side Test Parameters screen and the Chief Admin Test
+// Master screen, and from the Excel bulk upload.
+async function generateParameterCode(parameterName) {
+  const base = (parameterName || '').replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 4) || 'PARM';
+  let n = 1;
+  let code = `${base}${String(n).padStart(3, '0')}`;
+  while (await ParameterMaster.findOne({ where: { parameterCode: code } })) {
+    n += 1;
+    code = `${base}${String(n).padStart(3, '0')}`;
+  }
+  return code;
+}
+
 // POST /api/masters/tests
 async function createTest(req, res) {
   const { testCode, testName, parameters } = req.body;
@@ -29,6 +45,7 @@ async function createTest(req, res) {
       await ParameterMaster.create({
         testId: test.id,
         clientId,
+        parameterCode: await generateParameterCode(p.parameterName),
         parameterName: p.parameterName,
         unit: p.unit,
         normalRangeLow: p.normalRangeLow,
@@ -65,8 +82,9 @@ async function updateTest(req, res) {
 }
 
 // POST /api/masters/tests/:testId/parameters
-// Body: { parameterCode, parameterName, unit, normalRangeLow, normalRangeHigh,
+// Body: { parameterName, unit, normalRangeLow, normalRangeHigh,
 //         normalRanges?: [{ gender, ageMin, ageMax, normalRangeLow, normalRangeHigh }] }
+// parameterCode is always generated here, never accepted from the caller.
 // normalRangeLow/High on the parameter itself are the default range, used
 // whenever a result's patient doesn't match any age/gender-specific rule
 // below. normalRanges is optional - a parameter can be created with just a
@@ -75,9 +93,8 @@ async function addParameter(req, res) {
   const test = await TestMaster.findByPk(req.params.testId);
   if (!test) return res.status(404).json({ message: 'Test not found' });
 
-  const { parameterCode, parameterName, unit, normalRangeLow, normalRangeHigh, normalRanges } = req.body;
+  const { parameterName, unit, normalRangeLow, normalRangeHigh, normalRanges } = req.body;
   if (!parameterName) return res.status(400).json({ message: 'parameterName is required' });
-  if (!parameterCode?.trim()) return res.status(400).json({ message: 'parameterCode is required' });
 
   if (normalRanges !== undefined) {
     if (!Array.isArray(normalRanges)) return res.status(400).json({ message: 'normalRanges must be an array' });
@@ -88,8 +105,9 @@ async function addParameter(req, res) {
     }
   }
 
+  const parameterCode = await generateParameterCode(parameterName);
   const parameter = await ParameterMaster.create({
-    testId: test.id, clientId: requesterClientId(req), parameterCode: parameterCode.trim(), parameterName, unit, normalRangeLow, normalRangeHigh,
+    testId: test.id, clientId: requesterClientId(req), parameterCode, parameterName, unit, normalRangeLow, normalRangeHigh,
   });
 
   for (const r of normalRanges || []) {
@@ -256,7 +274,10 @@ async function commitUpload(req, res) {
     if (parameterName) {
       const [, paramCreated] = await ParameterMaster.findOrCreate({
         where: { testId: test.id, parameterName, clientId: null },
-        defaults: { unit: row.unit, normalRangeLow: row.normalRangeLow, normalRangeHigh: row.normalRangeHigh },
+        defaults: {
+          parameterCode: await generateParameterCode(parameterName),
+          unit: row.unit, normalRangeLow: row.normalRangeLow, normalRangeHigh: row.normalRangeHigh,
+        },
       });
       if (paramCreated) results.parametersAdded += 1;
       else results.skipped += 1;

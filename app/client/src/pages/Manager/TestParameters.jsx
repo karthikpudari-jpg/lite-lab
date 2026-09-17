@@ -10,7 +10,7 @@ export default function TestParameters() {
   const [tests, setTests] = useState([]);
   const [shortNames, setShortNames] = useState([]);
   const [selectedTestId, setSelectedTestId] = useState('');
-  const [paramForm, setParamForm] = useState({ parameterCode: '', parameterName: '', unit: '', normalRangeLow: '', normalRangeHigh: '' });
+  const [paramForm, setParamForm] = useState({ parameterName: '', unit: '', normalRangeLow: '', normalRangeHigh: '' });
   const [rangeRows, setRangeRows] = useState([]); // extra age/gender-specific rules for the parameter being created
   const [paramError, setParamError] = useState('');
   const [shortNameForm, setShortNameForm] = useState({ testId: '', shortName: '' });
@@ -43,7 +43,7 @@ export default function TestParameters() {
     const normalRanges = rangeRows.filter((r) => r.normalRangeLow || r.normalRangeHigh);
     try {
       await api.post(`/test-config/tests/${selectedTestId}/parameters`, { ...paramForm, normalRanges });
-      setParamForm({ parameterCode: '', parameterName: '', unit: '', normalRangeLow: '', normalRangeHigh: '' });
+      setParamForm({ parameterName: '', unit: '', normalRangeLow: '', normalRangeHigh: '' });
       setRangeRows([]);
       loadAll();
     } catch (err) {
@@ -140,9 +140,6 @@ export default function TestParameters() {
         {selectedTestId && (
           <>
             <form onSubmit={handleAddParameter} className="form-grid" style={{ alignItems: 'end' }}>
-              <label><span>Parameter Code</span>
-                <input value={paramForm.parameterCode} onChange={(e) => setParamForm((f) => ({ ...f, parameterCode: e.target.value }))} required />
-              </label>
               <label><span>Parameter Name</span>
                 <input value={paramForm.parameterName} onChange={(e) => setParamForm((f) => ({ ...f, parameterName: e.target.value }))} required />
               </label>
