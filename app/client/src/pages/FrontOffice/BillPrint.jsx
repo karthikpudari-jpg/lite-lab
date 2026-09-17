@@ -80,6 +80,12 @@ export default function BillPrint() {
               <div><span>Cancelled / Refunded</span><strong>₹{totalRefunded.toFixed(2)}</strong></div>
             ) : null;
           })()}
+          {(() => {
+            const totalPostDiscount = (bill.BillDiscounts || []).reduce((sum, d) => sum + Number(d.amount), 0);
+            return totalPostDiscount > 0 ? (
+              <div><span>Post-Billing Discount</span><strong>₹{totalPostDiscount.toFixed(2)}</strong></div>
+            ) : null;
+          })()}
           <div><span>Net Payable</span><strong>₹{bill.paidAmount}</strong></div>
         </div>
         {bill.remarks && <p style={{ marginTop: 16 }}><strong>Remarks:</strong> {bill.remarks}</p>}

@@ -19,5 +19,6 @@ router.post('/bills', requireRole(ROLES.FRONT_OFFICE), billingCtrl.createBill);
 router.get('/bills', requireRole(ROLES.FRONT_OFFICE, ROLES.MANAGER), billingCtrl.listBills);
 router.get('/bills/:id', requireRole(ROLES.FRONT_OFFICE, ROLES.MANAGER), billingCtrl.getBill);
 router.put('/bills/:billId/items/:itemId/cancel', requireRole(ROLES.FRONT_OFFICE, ROLES.MANAGER), billingCtrl.cancelBillItem);
+router.put('/bills/:billId/discount', requireRole(ROLES.FRONT_OFFICE, ROLES.MANAGER), billingCtrl.applyPostBillingDiscount);
 
 module.exports = router;

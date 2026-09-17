@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const {
-  sequelize, Bill, BillItem, Refund, ClientTestPrice, TestMaster, Sample, Report, Patient, ReferralDoctor, Client,
-  Payor, PayorTestPrice, ClientTestShortName,
+  sequelize, Bill, BillItem, Refund, BillDiscount, ClientTestPrice, TestMaster, Sample, Report, Patient, ReferralDoctor,
+  Client, Payor, PayorTestPrice, ClientTestShortName,
 } = require('../models');
 const { findOrCreatePatient } = require('./patient.controller');
 const { findOrCreateDoctor } = require('./referralDoctor.controller');
@@ -15,6 +15,7 @@ const billIncludes = [
   ReferralDoctor,
   Payor,
   { model: BillItem, include: [TestMaster, { model: Sample, include: [Report] }, Refund] },
+  BillDiscount,
 ];
 
 // POST /api/billing/bills
@@ -157,6 +158,15 @@ async function cancelBillItem(req, res) {
   const bill = await Bill.findOne({ where: { id: billId, clientId } });
   if (!bill) return res.status(404).json({ message: 'Bill not found' });
 
+  if (client.refundAllowedDays > 0 && bill.walkInDate) {
+    const daysSinceBilling = Math.floor((Date.now() - new Date(bill.walkInDate).getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSinceBilling > client.refundAllowedDays) {
+      return res.status(400).json({
+        message: `Cancellation & refund is only allowed within ${client.refundAllowedDays} day(s) of billing. This bill was made ${daysSinceBilling} day(s) ago.`,
+      });
+    }
+  }
+
   const billItem = await BillItem.findOne({
     where: { id: itemId, billId: bill.id },
     include: [{ model: Sample, include: [Report] }, Refund, TestMaster],
@@ -197,6 +207,54 @@ async function cancelBillItem(req, res) {
   return res.status(201).json({ refund: result, bill: full });
 }
 
+// PUT /api/billing/bills/:billId/discount
+// Body: { amount, mode, reason } -- applies an extra discount to a bill after
+// it's already been created, separate from any discount given at billing
+// time. No test is cancelled; it just reduces what's still payable, and
+// (since bills are collected in full up front) that amount is handed back,
+// so it's tracked with a payment mode exactly like a Refund.
+async function applyPostBillingDiscount(req, res) {
+  const { clientId } = req.user;
+  const { billId } = req.params;
+  const { amount, mode, reason } = req.body;
+
+  const client = await Client.findByPk(clientId);
+  if (!client?.allowPostBillingDiscount) {
+    return res.status(403).json({ message: 'Post-billing discount is not enabled for this clinic. Contact your administrator.' });
+  }
+
+  const discountAmount = Number(amount);
+  if (!discountAmount || discountAmount <= 0) {
+    return res.status(400).json({ message: 'A discount amount greater than 0 is required' });
+  }
+  if (!mode?.trim()) {
+    return res.status(400).json({ message: 'Payment mode is required' });
+  }
+  if (!reason?.trim()) {
+    return res.status(400).json({ message: 'A reason is required for a post-billing discount' });
+  }
+
+  const bill = await Bill.findOne({ where: { id: billId, clientId } });
+  if (!bill) return res.status(404).json({ message: 'Bill not found' });
+
+  if (discountAmount > Number(bill.paidAmount)) {
+    return res.status(400).json({ message: `Discount cannot exceed ₹${Number(bill.paidAmount).toFixed(2)} remaining on this bill` });
+  }
+
+  const result = await sequelize.transaction(async (t) => {
+    const billDiscount = await BillDiscount.create({ billId: bill.id, amount: discountAmount, mode, reason }, { transaction: t });
+
+    bill.discount = Number(bill.discount) + discountAmount;
+    bill.paidAmount = Math.max(0, Number(bill.paidAmount) - discountAmount);
+    await bill.save({ transaction: t });
+
+    return billDiscount;
+  });
+
+  const full = await Bill.findOne({ where: { id: bill.id, clientId }, include: [...billIncludes, Client] });
+  return res.status(201).json({ discount: result, bill: full });
+}
+
 // GET /api/billing/bills  (grid view - includes per-test status for each order)
 async function listBills(req, res) {
   const { clientId } = req.user;
@@ -219,6 +277,7 @@ async function listBills(req, res) {
     patient: b.Patient ? { id: b.Patient.id, umr: b.Patient.umr, name: b.Patient.name, mobile: b.Patient.mobile } : null,
     referredDoctor: b.ReferralDoctor?.name || null,
     payor: b.Payor?.name || null,
+    postBillingDiscount: (b.BillDiscounts || []).reduce((sum, d) => sum + Number(d.amount), 0),
     tests: b.BillItems.map((item) => ({
       id: item.id,
       testName: item.TestMaster?.testName,
@@ -263,24 +322,51 @@ async function listPayorTestPrices(req, res) {
   return res.json(prices);
 }
 
-// GET /api/billing-settings  (current client's own cancellation/refund toggle)
+// GET /api/billing-settings  (current client's own cancellation/refund + post-discount toggles)
 async function getBillingSettings(req, res) {
   const client = await Client.findByPk(req.user.clientId);
-  return res.json({ allowBillCancellationRefund: client.allowBillCancellationRefund });
+  return res.json({
+    allowBillCancellationRefund: client.allowBillCancellationRefund,
+    refundAllowedDays: client.refundAllowedDays,
+    allowPostBillingDiscount: client.allowPostBillingDiscount,
+  });
 }
 
 // PUT /api/billing-settings  (Admin/Manager self-service - no Chief Admin needed)
 async function updateBillingSettings(req, res) {
   const client = await Client.findByPk(req.user.clientId);
-  const { allowBillCancellationRefund } = req.body;
-  if (typeof allowBillCancellationRefund !== 'boolean') {
-    return res.status(400).json({ message: 'allowBillCancellationRefund must be true or false' });
+  const { allowBillCancellationRefund, refundAllowedDays, allowPostBillingDiscount } = req.body;
+
+  const updates = {};
+  if (allowBillCancellationRefund !== undefined) {
+    if (typeof allowBillCancellationRefund !== 'boolean') {
+      return res.status(400).json({ message: 'allowBillCancellationRefund must be true or false' });
+    }
+    updates.allowBillCancellationRefund = allowBillCancellationRefund;
   }
-  await client.update({ allowBillCancellationRefund });
-  return res.json({ allowBillCancellationRefund: client.allowBillCancellationRefund });
+  if (refundAllowedDays !== undefined) {
+    const days = Number(refundAllowedDays);
+    if (!Number.isInteger(days) || days < 0) {
+      return res.status(400).json({ message: 'refundAllowedDays must be a whole number of 0 or more' });
+    }
+    updates.refundAllowedDays = days;
+  }
+  if (allowPostBillingDiscount !== undefined) {
+    if (typeof allowPostBillingDiscount !== 'boolean') {
+      return res.status(400).json({ message: 'allowPostBillingDiscount must be true or false' });
+    }
+    updates.allowPostBillingDiscount = allowPostBillingDiscount;
+  }
+
+  await client.update(updates);
+  return res.json({
+    allowBillCancellationRefund: client.allowBillCancellationRefund,
+    refundAllowedDays: client.refundAllowedDays,
+    allowPostBillingDiscount: client.allowPostBillingDiscount,
+  });
 }
 
 module.exports = {
   createBill, getBill, listBills, listTestPrices, listPayors, listPayorTestPrices, cancelBillItem,
-  getBillingSettings, updateBillingSettings,
+  applyPostBillingDiscount, getBillingSettings, updateBillingSettings,
 };

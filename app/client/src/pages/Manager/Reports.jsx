@@ -101,6 +101,7 @@ export default function Reports() {
         <div className="stat-tile"><div className="value">₹{collection?.totalBilled ?? 0}</div><div className="label">Total Billed</div></div>
         <div className="stat-tile"><div className="value">₹{collection?.totalCollected ?? 0}</div><div className="label">Total Collected</div></div>
         <div className="stat-tile"><div className="value">₹{collection?.totalRefunded ?? 0}</div><div className="label">Cancelled / Refunded</div></div>
+        <div className="stat-tile"><div className="value">₹{collection?.totalPostDiscount ?? 0}</div><div className="label">Post-Billing Discount</div></div>
         <div className="stat-tile"><div className="value">₹{collection?.outstanding ?? 0}</div><div className="label">Outstanding</div></div>
       </div>
 
@@ -154,15 +155,15 @@ export default function Reports() {
       <div className="card">
         <h3>Outstanding Amounts</h3>
         <table>
-          <thead><tr><th>Bill No</th><th>Patient</th><th>Total</th><th>Paid</th><th>Refunded</th><th>Outstanding</th></tr></thead>
+          <thead><tr><th>Bill No</th><th>Patient</th><th>Total</th><th>Paid</th><th>Refunded</th><th>Post-Billing Discount</th><th>Outstanding</th></tr></thead>
           <tbody>
             {outstanding.map((o) => (
               <tr key={o.billNo}>
                 <td>{o.billNo}</td><td>{o.patient}</td><td>₹{o.totalAmount}</td><td>₹{o.paidAmount}</td>
-                <td>₹{o.refundedAmount || 0}</td><td>₹{o.outstanding}</td>
+                <td>₹{o.refundedAmount || 0}</td><td>₹{o.postDiscountAmount || 0}</td><td>₹{o.outstanding}</td>
               </tr>
             ))}
-            {outstanding.length === 0 && <tr><td colSpan={6}>No outstanding bills.</td></tr>}
+            {outstanding.length === 0 && <tr><td colSpan={7}>No outstanding bills.</td></tr>}
           </tbody>
         </table>
       </div>

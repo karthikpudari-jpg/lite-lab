@@ -98,6 +98,14 @@ const Client = sequelize.define('Client', {
   // billed test and record a refund against it. Off by default since it
   // touches money - a clinic has to be explicitly opted in.
   allowBillCancellationRefund: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+  // How many days after the bill's walk-in date cancellation & refund stays
+  // allowed. 0 means no limit. Only meaningful when allowBillCancellationRefund is on.
+  refundAllowedDays: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  // Whether Front Office/Manager can apply an extra discount to a bill after
+  // it's already been created ("post-billing"), separate from the discount
+  // that can be given at the time of billing itself. Off by default, like
+  // allowBillCancellationRefund - it also touches money already collected.
+  allowPostBillingDiscount: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
   ...AUDIT_FIELDS,
 }, { tableName: 'client' });
 
@@ -370,6 +378,20 @@ const Refund = sequelize.define('Refund', {
   ...AUDIT_FIELDS,
 }, { tableName: 'refund' });
 
+// One row per discount applied to a bill after it was already created
+// ("post-billing"), separate from the discount that can be given at the
+// time of billing (Bill.discount). Unlike a cancellation, no test is
+// cancelled - it just reduces what the bill still owes, and (since the
+// full amount is normally already collected at billing time) money is
+// physically handed back, so a payment mode is recorded just like a Refund.
+const BillDiscount = sequelize.define('BillDiscount', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  amount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+  mode: { type: DataTypes.STRING, allowNull: false },
+  reason: { type: DataTypes.STRING, allowNull: false },
+  ...AUDIT_FIELDS,
+}, { tableName: 'bill_discount' });
+
 // ---- LAB ------------------------------------------------------------------
 const Sample = sequelize.define('Sample', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
@@ -521,6 +543,9 @@ Refund.belongsTo(Bill, { foreignKey: 'billId' });
 BillItem.hasMany(Refund, { foreignKey: 'billItemId', onDelete: 'CASCADE' });
 Refund.belongsTo(BillItem, { foreignKey: 'billItemId' });
 
+Bill.hasMany(BillDiscount, { foreignKey: 'billId', onDelete: 'CASCADE' });
+BillDiscount.belongsTo(Bill, { foreignKey: 'billId' });
+
 Client.hasMany(Sample, { foreignKey: 'clientId', onDelete: 'CASCADE' });
 Sample.belongsTo(Client, { foreignKey: 'clientId' });
 
@@ -609,6 +634,7 @@ module.exports = {
   Bill,
   BillItem,
   Refund,
+  BillDiscount,
   Sample,
   Result,
   Report,

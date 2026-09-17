@@ -9,7 +9,8 @@ export default function Orders() {
   const navigate = useNavigate();
   const { auth } = useAuth();
   const canConfigure = auth?.user?.roles?.includes('ADMIN') || auth?.user?.roles?.includes('MANAGER');
-  const [settings, setSettings] = useState(null); // { allowBillCancellationRefund }
+  const [settings, setSettings] = useState(null); // { allowBillCancellationRefund, refundAllowedDays, allowPostBillingDiscount }
+  const [settingsForm, setSettingsForm] = useState({ refundAllowedDays: '0' });
   const [showSettings, setShowSettings] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState('');
@@ -24,6 +25,11 @@ export default function Orders() {
   const [refundError, setRefundError] = useState('');
   const [refundSaving, setRefundSaving] = useState(false);
 
+  const [discountBill, setDiscountBill] = useState(null); // the bill row getting a post-billing discount
+  const [discountForm, setDiscountForm] = useState({ amount: '', mode: 'Cash', reason: '' });
+  const [discountError, setDiscountError] = useState('');
+  const [discountSaving, setDiscountSaving] = useState(false);
+
   async function load() {
     const { data } = await api.get('/billing/bills');
     setBills(data);
@@ -32,6 +38,7 @@ export default function Orders() {
   async function loadSettings() {
     const { data } = await api.get('/billing-settings');
     setSettings(data);
+    setSettingsForm({ refundAllowedDays: String(data.refundAllowedDays ?? 0) });
   }
   useEffect(() => { load(); loadSettings(); }, []);
 
@@ -47,13 +54,32 @@ export default function Orders() {
     return matchesSearch && matchesFrom && matchesTo;
   });
 
-  async function toggleSetting() {
+  async function toggleSetting(key, label) {
     setSettingsSaving(true);
     setSettingsMessage('');
     try {
-      const { data } = await api.put('/billing-settings', { allowBillCancellationRefund: !settings.allowBillCancellationRefund });
+      const { data } = await api.put('/billing-settings', { [key]: !settings[key] });
       setSettings(data);
-      setSettingsMessage(data.allowBillCancellationRefund ? 'Cancellation & Refund is now enabled.' : 'Cancellation & Refund is now disabled.');
+      setSettingsMessage(`${label} is now ${data[key] ? 'enabled' : 'disabled'}.`);
+    } catch (err) {
+      setSettingsMessage(err.response?.data?.message || 'Failed to update setting');
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
+
+  async function saveRefundAllowedDays(e) {
+    e.preventDefault();
+    setSettingsSaving(true);
+    setSettingsMessage('');
+    try {
+      const { data } = await api.put('/billing-settings', { refundAllowedDays: Number(settingsForm.refundAllowedDays) || 0 });
+      setSettings(data);
+      setSettingsMessage(
+        data.refundAllowedDays > 0
+          ? `Cancellation & refund now allowed within ${data.refundAllowedDays} day(s) of billing.`
+          : 'Cancellation & refund now allowed with no day limit.',
+      );
     } catch (err) {
       setSettingsMessage(err.response?.data?.message || 'Failed to update setting');
     } finally {
@@ -92,6 +118,31 @@ export default function Orders() {
       setRefundError(err.response?.data?.message || 'Failed to record cancellation/refund');
     } finally {
       setRefundSaving(false);
+    }
+  }
+
+  function openDiscountModal(bill) {
+    setDiscountBill(bill);
+    setDiscountForm({ amount: '', mode: 'Cash', reason: '' });
+    setDiscountError('');
+  }
+
+  async function submitDiscount(e) {
+    e.preventDefault();
+    setDiscountError('');
+    setDiscountSaving(true);
+    try {
+      await api.put(`/billing/bills/${discountBill.id}/discount`, {
+        amount: Number(discountForm.amount),
+        mode: discountForm.mode,
+        reason: discountForm.reason,
+      });
+      setDiscountBill(null);
+      await load();
+    } catch (err) {
+      setDiscountError(err.response?.data?.message || 'Failed to apply discount');
+    } finally {
+      setDiscountSaving(false);
     }
   }
 
@@ -142,6 +193,9 @@ export default function Orders() {
                   <button onClick={() => navigate(`/app/billing/print/${b.id}`)}>Print Bill</button>
                   <button disabled={!anyReleased} onClick={() => navigate(`/app/report/${b.id}`)}>Print Report</button>
                   {settings?.allowBillCancellationRefund && <button onClick={() => openRefundModal(b)}>Cancel / Refund</button>}
+                  {settings?.allowPostBillingDiscount && Number(b.paidAmount) > 0 && (
+                    <button onClick={() => openDiscountModal(b)}>Discount</button>
+                  )}
                 </td>
               </tr>
             );
@@ -152,23 +206,57 @@ export default function Orders() {
 
       {showSettings && (
         <div className="modal-overlay">
-          <div className="modal-card" style={{ maxWidth: 420 }}>
+          <div className="modal-card" style={{ maxWidth: 460 }}>
             <h2>Orders Settings</h2>
             <p style={{ fontSize: 13, color: '#64748b' }}>
-              Available to Admin and Manager. Controls whether Front Office can cancel a billed test and
-              record a refund against it, from this same Orders screen.
+              Available to Admin and Manager. Controls cancellation/refund and post-billing discount for
+              Front Office, from this same Orders screen.
             </p>
             {settings ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
-                <div>
-                  <strong>Bill Cancellation & Refund</strong>
-                  <div style={{ fontSize: 12, color: '#64748b' }}>
-                    Currently {settings.allowBillCancellationRefund ? 'enabled' : 'disabled'} for this clinic.
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
+                  <div>
+                    <strong>Bill Cancellation & Refund</strong>
+                    <div style={{ fontSize: 12, color: '#64748b' }}>
+                      Currently {settings.allowBillCancellationRefund ? 'enabled' : 'disabled'} for this clinic.
+                    </div>
                   </div>
+                  <button type="button" onClick={() => toggleSetting('allowBillCancellationRefund', 'Cancellation & Refund')} disabled={settingsSaving}>
+                    {settingsSaving ? 'Saving…' : settings.allowBillCancellationRefund ? 'Disable' : 'Enable'}
+                  </button>
                 </div>
-                <button type="button" onClick={toggleSetting} disabled={settingsSaving}>
-                  {settingsSaving ? 'Saving…' : settings.allowBillCancellationRefund ? 'Disable' : 'Enable'}
-                </button>
+
+                <form
+                  onSubmit={saveRefundAllowedDays}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}
+                >
+                  <div>
+                    <strong>Cancellation & Refund Allowed Days</strong>
+                    <div style={{ fontSize: 12, color: '#64748b' }}>
+                      How many days after billing a test can still be cancelled/refunded. 0 = no limit.
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      type="number" min="0" step="1" style={{ width: 70 }}
+                      value={settingsForm.refundAllowedDays}
+                      onChange={(e) => setSettingsForm({ refundAllowedDays: e.target.value })}
+                    />
+                    <button type="submit" disabled={settingsSaving}>Save</button>
+                  </div>
+                </form>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
+                  <div>
+                    <strong>Post-Billing Discount</strong>
+                    <div style={{ fontSize: 12, color: '#64748b' }}>
+                      Currently {settings.allowPostBillingDiscount ? 'enabled' : 'disabled'} for this clinic.
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => toggleSetting('allowPostBillingDiscount', 'Post-Billing Discount')} disabled={settingsSaving}>
+                    {settingsSaving ? 'Saving…' : settings.allowPostBillingDiscount ? 'Disable' : 'Enable'}
+                  </button>
+                </div>
               </div>
             ) : <p>Loading…</p>}
             {settingsMessage && <p style={{ fontSize: 13, color: '#166534' }}>{settingsMessage}</p>}
@@ -248,6 +336,44 @@ export default function Orders() {
                 <button type="button" onClick={() => setRefundBill(null)}>Close</button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {discountBill && (
+        <div className="modal-overlay">
+          <div className="modal-card" style={{ maxWidth: 480 }}>
+            <h2>Discount — {discountBill.billNo}</h2>
+            <p style={{ fontSize: 13, color: '#64748b' }}>
+              Applies an extra discount to this bill after billing, on top of any discount already given.
+              Since the bill was already collected in full, this amount is handed back to the patient.
+            </p>
+            <form onSubmit={submitDiscount}>
+              <div className="form-grid">
+                <label><span>Discount Amount (max ₹{Number(discountBill.paidAmount).toFixed(2)})</span>
+                  <input
+                    type="number" min="0.01" step="0.01"
+                    max={Number(discountBill.paidAmount)}
+                    value={discountForm.amount}
+                    onChange={(e) => setDiscountForm((f) => ({ ...f, amount: e.target.value }))}
+                    required
+                  />
+                </label>
+                <label><span>Payment Mode</span>
+                  <select value={discountForm.mode} onChange={(e) => setDiscountForm((f) => ({ ...f, mode: e.target.value }))}>
+                    {REFUND_MODES.map((m) => <option key={m}>{m}</option>)}
+                  </select>
+                </label>
+                <label><span>Reason</span>
+                  <input value={discountForm.reason} onChange={(e) => setDiscountForm((f) => ({ ...f, reason: e.target.value }))} required />
+                </label>
+              </div>
+              {discountError && <p className="error-text">{discountError}</p>}
+              <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setDiscountBill(null)}>Cancel</button>
+                <button type="submit" disabled={discountSaving}>{discountSaving ? 'Saving…' : 'Apply Discount'}</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

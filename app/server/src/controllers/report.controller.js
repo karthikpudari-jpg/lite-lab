@@ -1,11 +1,23 @@
 const { Op } = require('sequelize');
 const XLSX = require('xlsx');
-const { Bill, BillItem, TestMaster, Sample, Report, Patient, Refund } = require('../models');
+const { Bill, BillItem, TestMaster, Sample, Report, Patient, Refund, BillDiscount } = require('../models');
 
 /** Sum of everything refunded on a bill - already cancelled & paid back, so it must
  * never be counted as still "outstanding"/due from the patient. */
 function refundedTotal(bill) {
   return (bill.Refunds || []).reduce((sum, r) => sum + Number(r.amount), 0);
+}
+
+/** Sum of every post-billing discount on a bill - also money already handed
+ * back, not still owed, for the same reason as a refund. */
+function postDiscountTotal(bill) {
+  return (bill.BillDiscounts || []).reduce((sum, d) => sum + Number(d.amount), 0);
+}
+
+/** Everything already given back on a bill (cancellation refunds + post-billing
+ * discounts) - the amount that must be netted out of any "outstanding" figure. */
+function givenBackTotal(bill) {
+  return refundedTotal(bill) + postDiscountTotal(bill);
 }
 
 function dateKey(date, groupBy) {
@@ -57,19 +69,21 @@ async function transactions(req, res) {
 async function collectionSummary(req, res) {
   const { clientId } = req.user;
   const { from, to } = req.query;
-  const bills = await Bill.findAll({ where: { clientId, ...dateRangeWhere(from, to) }, include: [Refund] });
+  const bills = await Bill.findAll({ where: { clientId, ...dateRangeWhere(from, to) }, include: [Refund, BillDiscount] });
   const totalBilled = bills.reduce((s, b) => s + Number(b.totalAmount), 0);
   const totalCollected = bills.reduce((s, b) => s + Number(b.paidAmount), 0);
   const totalRefunded = bills.reduce((s, b) => s + refundedTotal(b), 0);
+  const totalPostDiscount = bills.reduce((s, b) => s + postDiscountTotal(b), 0);
 
   return res.json({
     billCount: bills.length,
     totalBilled,
     totalCollected,
     totalRefunded,
-    // A refund is money already cancelled & paid back, not money still owed -
-    // net it out so it never inflates "outstanding".
-    outstanding: totalBilled - totalCollected - totalRefunded,
+    totalPostDiscount,
+    // A refund/post-billing discount is money already given back, not money
+    // still owed - net both out so they never inflate "outstanding".
+    outstanding: totalBilled - totalCollected - totalRefunded - totalPostDiscount,
   });
 }
 
@@ -79,19 +93,20 @@ async function outstanding(req, res) {
   const { from, to } = req.query;
   const bills = await Bill.findAll({
     where: { clientId, ...dateRangeWhere(from, to) },
-    include: [Patient, Refund],
+    include: [Patient, Refund, BillDiscount],
     order: [['createdAt', 'DESC']],
   });
   const unpaid = bills
     .map((b) => {
-      const refunded = refundedTotal(b);
+      const givenBack = givenBackTotal(b);
       return {
         billNo: b.billNo,
         patient: b.Patient?.name,
         totalAmount: b.totalAmount,
         paidAmount: b.paidAmount,
-        refundedAmount: refunded,
-        outstanding: Number(b.totalAmount) - Number(b.paidAmount) - refunded,
+        refundedAmount: refundedTotal(b),
+        postDiscountAmount: postDiscountTotal(b),
+        outstanding: Number(b.totalAmount) - Number(b.paidAmount) - givenBack,
         createdAt: b.createdAt,
       };
     })
@@ -179,7 +194,7 @@ async function exportReport(req, res) {
   const range = dateRangeWhere(from, to);
 
   const [bills, testItems, samplesWithReport] = await Promise.all([
-    Bill.findAll({ where: { clientId, ...range }, include: [Patient, Refund], order: [['createdAt', 'ASC']] }),
+    Bill.findAll({ where: { clientId, ...range }, include: [Patient, Refund, BillDiscount], order: [['createdAt', 'ASC']] }),
     BillItem.findAll({ include: [TestMaster, { model: Bill, where: { clientId, ...range }, attributes: [] }] }),
     Sample.findAll({ where: { clientId, ...range }, include: [Report] }),
   ]);
@@ -194,6 +209,7 @@ async function exportReport(req, res) {
   const transactionRows = Object.values(grouped).map((t) => ({ Period: t.period, 'Bill Count': t.billCount, 'Total Amount': t.totalAmount }));
 
   const totalRefunded = bills.reduce((s, b) => s + refundedTotal(b), 0);
+  const totalPostDiscount = bills.reduce((s, b) => s + postDiscountTotal(b), 0);
   const summaryRows = [{
     'From Date': from || 'All time',
     'To Date': to || 'All time',
@@ -201,7 +217,8 @@ async function exportReport(req, res) {
     'Total Billed': bills.reduce((s, b) => s + Number(b.totalAmount), 0),
     'Total Collected': bills.reduce((s, b) => s + Number(b.paidAmount), 0),
     'Total Refunded': totalRefunded,
-    Outstanding: bills.reduce((s, b) => s + Number(b.totalAmount) - Number(b.paidAmount) - refundedTotal(b), 0),
+    'Total Post-Billing Discount': totalPostDiscount,
+    Outstanding: bills.reduce((s, b) => s + Number(b.totalAmount) - Number(b.paidAmount) - givenBackTotal(b), 0),
   }];
 
   const outstandingRows = bills
@@ -211,7 +228,8 @@ async function exportReport(req, res) {
       'Total Amount': b.totalAmount,
       'Paid Amount': b.paidAmount,
       Refunded: refundedTotal(b),
-      Outstanding: Number(b.totalAmount) - Number(b.paidAmount) - refundedTotal(b),
+      'Post-Billing Discount': postDiscountTotal(b),
+      Outstanding: Number(b.totalAmount) - Number(b.paidAmount) - givenBackTotal(b),
     }))
     .filter((r) => r.Outstanding > 0);
 
