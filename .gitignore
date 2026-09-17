@@ -12,3 +12,11 @@ app/server/.env
 app/client/dist/
 app/server/uploads/
 database/*.sql
+demo/*.pdf
+
+# Lite HMS - OPD app
+app-opd/server/.env
+app-opd/client/dist/
+
+# Local Netlify folder
+.netlify

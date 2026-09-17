@@ -1,6 +1,10 @@
 import axios from 'axios';
 
-const api = axios.create({ baseURL: '/api' });
+// Defaults to '/api' (same-origin) for the normal single-URL deployment where
+// this server also serves the built frontend. Set VITE_API_BASE_URL when the
+// frontend is hosted separately from the API (e.g. a static Netlify deploy
+// pointing at a backend hosted elsewhere).
+const api = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL || '/api' });
 
 const PUBLIC_PATHS = ['/auth/login', '/auth/chief-admin/login', '/auth/self-register'];
 

@@ -1,4 +1,5 @@
 const bcrypt = require('bcryptjs');
+const { Op } = require('sequelize');
 const { ChiefAdmin, Client, ClientUser, Role } = require('../models');
 const { signToken } = require('../utils/jwt');
 const { syncClientPaymentStatus } = require('./subscription.controller');
@@ -13,7 +14,8 @@ async function chiefAdminLogin(req, res) {
     return res.status(400).json({ message: 'username and password are required' });
   }
 
-  const admin = await ChiefAdmin.findOne({ where: { username }, include: [Role] });
+  // Case-insensitive: "Karthik" and "karthik" are the same login.
+  const admin = await ChiefAdmin.findOne({ where: { username: { [Op.iLike]: username } }, include: [Role] });
   if (!admin || !admin.active || !(await bcrypt.compare(password, admin.passwordHash))) {
     return res.status(401).json({ message: 'Invalid credentials' });
   }
@@ -33,13 +35,14 @@ async function clientUserLogin(req, res) {
     return res.status(400).json({ message: 'clientCode, username and password are required' });
   }
 
-  const client = await Client.findOne({ where: { clientCode } });
+  // Case-insensitive: clientCode and username shouldn't trip people up over capitalization.
+  const client = await Client.findOne({ where: { clientCode: { [Op.iLike]: clientCode } } });
   if (!client || !client.active) {
     return res.status(401).json({ message: 'Invalid client code' });
   }
 
   const user = await ClientUser.findOne({
-    where: { clientId: client.id, username },
+    where: { clientId: client.id, username: { [Op.iLike]: username } },
     include: [Role],
   });
   if (!user || !user.active || !(await bcrypt.compare(password, user.passwordHash))) {
