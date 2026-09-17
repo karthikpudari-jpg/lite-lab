@@ -1,7 +1,42 @@
 import { useEffect, useState } from 'react';
 import api from '../../api/client';
+import { downloadFile } from '../../utils/download';
+
+/** A minimal inline bar chart - no charting library needed for a handful of bars. */
+function BarChart({ data, valueKey, labelKey }) {
+  if (data.length === 0) return <p style={{ color: '#94a3b8', fontSize: 13 }}>No data for this period.</p>;
+
+  const w = 640, h = 200, pad = 28, gap = 10;
+  const max = Math.max(...data.map((d) => Number(d[valueKey])), 1);
+  const barW = Math.max(8, (w - pad * 2 - gap * (data.length - 1)) / data.length);
+
+  return (
+    <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="xMinYMid meet">
+      <line x1={pad} y1={h - pad} x2={w - 4} y2={h - pad} stroke="#e2e8f0" strokeWidth="1" />
+      {data.map((d, i) => {
+        const value = Number(d[valueKey]);
+        const barH = ((h - pad * 2) * value) / max;
+        const x = pad + i * (barW + gap);
+        const y = h - pad - barH;
+        return (
+          <g key={i}>
+            <rect x={x} y={y} width={barW} height={barH} rx="3" fill="#2563eb" />
+            <text x={x + barW / 2} y={h - pad + 14} fontSize="9" fill="#64748b" textAnchor="middle">
+              {String(d[labelKey]).slice(5)}
+            </text>
+            <text x={x + barW / 2} y={y - 4} fontSize="9" fill="#334155" textAnchor="middle">
+              {value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
 
 export default function Reports() {
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const [collection, setCollection] = useState(null);
   const [outstanding, setOutstanding] = useState([]);
   const [labSummary, setLabSummary] = useState(null);
@@ -10,20 +45,57 @@ export default function Reports() {
   const [transactions, setTransactions] = useState([]);
   const [groupBy, setGroupBy] = useState('day');
 
-  useEffect(() => {
-    api.get('/reports/collection-summary').then((r) => setCollection(r.data));
-    api.get('/reports/outstanding').then((r) => setOutstanding(r.data));
-    api.get('/reports/lab-summary').then((r) => setLabSummary(r.data));
-    api.get('/reports/test-wise-revenue').then((r) => setTestRevenue(r.data));
-    api.get('/reports/report-status').then((r) => setReportStatus(r.data));
-  }, []);
+  const dateParams = { from: fromDate || undefined, to: toDate || undefined };
 
   useEffect(() => {
-    api.get('/reports/transactions', { params: { groupBy } }).then((r) => setTransactions(r.data));
-  }, [groupBy]);
+    api.get('/reports/collection-summary', { params: dateParams }).then((r) => setCollection(r.data));
+    api.get('/reports/outstanding', { params: dateParams }).then((r) => setOutstanding(r.data));
+    api.get('/reports/lab-summary', { params: dateParams }).then((r) => setLabSummary(r.data));
+    api.get('/reports/test-wise-revenue', { params: dateParams }).then((r) => setTestRevenue(r.data));
+    api.get('/reports/report-status', { params: dateParams }).then((r) => setReportStatus(r.data));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromDate, toDate]);
+
+  useEffect(() => {
+    api.get('/reports/transactions', { params: { ...dateParams, groupBy } }).then((r) => setTransactions(r.data));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromDate, toDate, groupBy]);
+
+  function exportUrl() {
+    // URLSearchParams stringifies `undefined` as the literal text "undefined"
+    // (unlike axios's `params`, which drops it) - only add a param when it's
+    // actually set, or the date filter breaks server-side.
+    const entries = { ...dateParams, groupBy };
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(entries)) {
+      if (value) params.set(key, value);
+    }
+    return `/reports/export?${params.toString()}`;
+  }
 
   return (
     <div>
+      <div className="card no-print">
+        <div className="topbar" style={{ marginBottom: 0 }}>
+          <h3 style={{ margin: 0 }}>Filter by Date</h3>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
+            <label style={{ marginBottom: 0 }}><span>From Date</span>
+              <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+            </label>
+            <label style={{ marginBottom: 0 }}><span>To Date</span>
+              <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+            </label>
+            {(fromDate || toDate) && (
+              <button type="button" className="secondary" onClick={() => { setFromDate(''); setToDate(''); }}>Clear</button>
+            )}
+            <button type="button" className="secondary" onClick={() => downloadFile(exportUrl(), 'reports-export.xlsx')}>
+              Export to Excel
+            </button>
+            <button type="button" onClick={() => window.print()}>Print / Save as PDF</button>
+          </div>
+        </div>
+      </div>
+
       <div className="stat-row">
         <div className="stat-tile"><div className="value">{collection?.billCount ?? '—'}</div><div className="label">Bills</div></div>
         <div className="stat-tile"><div className="value">₹{collection?.totalBilled ?? 0}</div><div className="label">Total Billed</div></div>
@@ -34,12 +106,13 @@ export default function Reports() {
       <div className="card">
         <div className="topbar">
           <h3 style={{ margin: 0 }}>Transactions</h3>
-          <select value={groupBy} onChange={(e) => setGroupBy(e.target.value)} style={{ width: 160 }}>
+          <select value={groupBy} onChange={(e) => setGroupBy(e.target.value)} style={{ width: 160 }} className="no-print">
             <option value="day">Day-wise</option>
             <option value="month">Month-wise</option>
           </select>
         </div>
-        <table>
+        <BarChart data={transactions} valueKey="totalAmount" labelKey="period" />
+        <table style={{ marginTop: 12 }}>
           <thead><tr><th>Period</th><th>Bill Count</th><th>Total Amount</th></tr></thead>
           <tbody>
             {transactions.map((t) => <tr key={t.period}><td>{t.period}</td><td>{t.billCount}</td><td>₹{t.totalAmount}</td></tr>)}

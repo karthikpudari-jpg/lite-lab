@@ -7,6 +7,7 @@ const { ROLES } = require('../utils/roles');
 const testCtrl = require('../controllers/testMaster.controller');
 const priceCtrl = require('../controllers/clientTestPrice.controller');
 const packageCtrl = require('../controllers/package.controller');
+const payorCtrl = require('../controllers/payor.controller');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -32,5 +33,16 @@ router.put('/packages/:id', packageCtrl.updatePackage);
 router.get('/packages/template', packageCtrl.downloadTemplate);
 router.post('/packages/upload/preview', upload.single('file'), packageCtrl.previewUpload);
 router.post('/packages/upload/commit', packageCtrl.commitUpload);
+
+// Payors (third parties billed monthly - corporate/TPA/insurer) and their
+// negotiated per-test prices
+router.get('/payors', payorCtrl.listPayors);
+router.post('/payors', payorCtrl.createPayor);
+router.put('/payors/:id', payorCtrl.updatePayor);
+router.get('/payors/:id/test-prices', payorCtrl.listPayorTestPrices);
+router.put('/payors/:id/test-prices', payorCtrl.setPayorTestPrice);
+router.get('/payors/:id/test-prices/template', payorCtrl.downloadPayorPriceTemplate);
+router.post('/payors/:id/test-prices/upload/preview', upload.single('file'), payorCtrl.previewPayorPriceUpload);
+router.post('/payors/:id/test-prices/upload/commit', payorCtrl.commitPayorPriceUpload);
 
 module.exports = router;

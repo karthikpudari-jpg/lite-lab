@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import api from '../../api/client';
 import { Icon } from '../../components/Icons';
+import SearchSelect from '../../components/SearchSelect';
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -21,6 +22,9 @@ function IconSearch() {
 export default function FrontDesk() {
   const [prices, setPrices] = useState([]);
   const [doctors, setDoctors] = useState([]);
+  const [payors, setPayors] = useState([]);
+  const [payorId, setPayorId] = useState('');
+  const [payorPrices, setPayorPrices] = useState([]);
 
   const [searchValue, setSearchValue] = useState('');
   const [patient, setPatient] = useState(null); // found existing patient
@@ -32,12 +36,17 @@ export default function FrontDesk() {
   const [showTestResults, setShowTestResults] = useState(false);
   const testBoxRef = useRef(null);
 
+  const [billingType, setBillingType] = useState('DIRECT'); // DIRECT | PAYOR | REFERRAL
   const [doctorName, setDoctorName] = useState('');
   const [walkInDate, setWalkInDate] = useState(todayISO());
   const [discount, setDiscount] = useState('0');
-  const [paymentMode, setPaymentMode] = useState('Cash');
+  const [paymentMode, setPaymentMode] = useState('');
   const [visitAddress, setVisitAddress] = useState('');
+  const [transactionNumber, setTransactionNumber] = useState('');
   const [remarks, setRemarks] = useState('');
+  const isCredit = billingType === 'PAYOR';
+  const needsTransactionNumber = !isCredit && (paymentMode === 'Card' || paymentMode === 'UPI');
+  const discountGiven = (Number(discount) || 0) > 0;
 
   const [bill, setBill] = useState(null);
   const [error, setError] = useState('');
@@ -45,7 +54,19 @@ export default function FrontDesk() {
   useEffect(() => {
     api.get('/billing/test-prices').then((r) => setPrices(r.data));
     api.get('/doctors').then((r) => setDoctors(r.data));
+    api.get('/billing/payors').then((r) => setPayors(r.data));
   }, []);
+
+  useEffect(() => {
+    if (!payorId) { setPayorPrices([]); return; }
+    api.get(`/billing/payors/${payorId}/test-prices`).then((r) => setPayorPrices(r.data));
+  }, [payorId]);
+
+  function effectivePrice(p) {
+    if (!payorId) return Number(p.price);
+    const override = payorPrices.find((pp) => pp.testId === p.testId);
+    return override ? Number(override.price) : Number(p.price);
+  }
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -82,6 +103,13 @@ export default function FrontDesk() {
     setSearchMessage('');
   }
 
+  function handleBillingTypeChange(type) {
+    setBillingType(type);
+    if (type !== 'PAYOR') setPayorId('');
+    else { setPaymentMode(''); setTransactionNumber(''); }
+    if (type !== 'REFERRAL') setDoctorName('');
+  }
+
   function addTest(testId) {
     setSelectedTests((prev) => [...prev, testId]);
     setTestQuery('');
@@ -93,23 +121,42 @@ export default function FrontDesk() {
 
   const selectedPrices = prices.filter((p) => selectedTests.includes(p.testId));
   const availablePrices = prices.filter((p) => !selectedTests.includes(p.testId));
-  const testSuggestions = availablePrices.filter((p) => p.TestMaster?.testName?.toLowerCase().includes(testQuery.toLowerCase()));
+  const testQueryLower = testQuery.toLowerCase();
+  const testSuggestions = availablePrices.filter((p) => (
+    p.TestMaster?.testName?.toLowerCase().includes(testQueryLower)
+    || p.TestMaster?.testCode?.toLowerCase().includes(testQueryLower)
+    || p.shortName?.toLowerCase().includes(testQueryLower)
+  ));
 
-  const gross = selectedPrices.reduce((s, p) => s + Number(p.price), 0);
+  const gross = selectedPrices.reduce((s, p) => s + effectivePrice(p), 0);
   const netPayable = Math.max(0, gross - (Number(discount) || 0));
 
   async function handleGenerateBill(e) {
     e.preventDefault();
     setError('');
+    if (!isCredit && !paymentMode) {
+      setError('Payment Mode is required.');
+      return;
+    }
+    if (discountGiven && !remarks.trim()) {
+      setError('Remarks are required when a discount is given.');
+      return;
+    }
+    if (needsTransactionNumber && !transactionNumber.trim()) {
+      setError(`Payment Transaction Number is required for ${paymentMode} payments.`);
+      return;
+    }
     try {
       const payload = {
         testIds: selectedTests,
         referredDoctorName: doctorName || undefined,
         walkInDate,
         discount: Number(discount) || 0,
-        paymentMode,
+        paymentMode: isCredit ? undefined : paymentMode,
         visitAddress,
+        transactionNumber: needsTransactionNumber ? transactionNumber : undefined,
         remarks,
+        payorId: payorId || undefined,
       };
       if (patient) {
         payload.patientId = patient.id;
@@ -130,9 +177,13 @@ export default function FrontDesk() {
     setBill(null);
     resetPatient();
     setSelectedTests([]);
+    setBillingType('DIRECT');
     setDoctorName('');
+    setPayorId('');
     setDiscount('0');
+    setPaymentMode('');
     setVisitAddress('');
+    setTransactionNumber('');
     setRemarks('');
     setWalkInDate(todayISO());
     api.get('/doctors').then((r) => setDoctors(r.data));
@@ -144,6 +195,8 @@ export default function FrontDesk() {
         <h3 className="section-heading"><span className="icon-badge"><Icon name="orders" size={16} /></span> Receipt — Order {bill.billNo}</h3>
         <p>UMR: <strong>{bill.Patient?.umr}</strong> · Patient: {bill.Patient?.name}</p>
         {bill.ReferralDoctor?.name && <p>Referred By: Dr. {bill.ReferralDoctor.name}</p>}
+        {bill.Payor?.name && <p>Billed To Credit Client: <strong>{bill.Payor.name}</strong></p>}
+        {bill.transactionNumber && <p>Payment Transaction Number: <strong>{bill.transactionNumber}</strong></p>}
         <table>
           <thead><tr><th>Test</th><th>Barcode</th><th>Price</th></tr></thead>
           <tbody>
@@ -166,18 +219,55 @@ export default function FrontDesk() {
   return (
     <div>
       <div className="card">
-        <label><span>Referred By (Doctor)</span>
-          <input
-            list="doctor-suggestions"
-            value={doctorName}
-            onChange={(e) => setDoctorName(e.target.value)}
-            placeholder="— None —"
-          />
-          <datalist id="doctor-suggestions">
-            {doctors.map((d) => <option key={d.id} value={d.name} />)}
-          </datalist>
-        </label>
-        <p style={{ fontSize: 12, color: '#94a3b8', marginTop: -10, marginBottom: 14 }}>for commission tracking</p>
+        <span style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13 }}>Billing Type</span>
+        <div className="segmented-toggle">
+          <button type="button" className={billingType === 'DIRECT' ? 'active' : ''} onClick={() => handleBillingTypeChange('DIRECT')}>Direct</button>
+          <button type="button" className={billingType === 'PAYOR' ? 'active' : ''} onClick={() => handleBillingTypeChange('PAYOR')}>Credit</button>
+          <button type="button" className={billingType === 'REFERRAL' ? 'active' : ''} onClick={() => handleBillingTypeChange('REFERRAL')}>Referral</button>
+        </div>
+
+        {billingType === 'DIRECT' && (
+          <p style={{ fontSize: 12, color: '#94a3b8', marginTop: -10, marginBottom: 14 }}>
+            The patient pays at the counter, at the client's standard test prices.
+          </p>
+        )}
+
+        {billingType === 'PAYOR' && (
+          <>
+            <div style={{ maxWidth: 340, marginBottom: 6 }}>
+              <span style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13 }}>Credit Client (corporate / TPA / insurer)</span>
+              <SearchSelect
+                options={payors.map((p) => ({ value: p.id, label: `${p.name} (${p.billingCycle === 'WEEKLY' ? 'Weekly' : 'Monthly'} billing)` }))}
+                value={payorId}
+                onChange={setPayorId}
+                placeholder="Search credit client…"
+              />
+            </div>
+            <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 0, marginBottom: 14 }}>
+              Tests below will be priced at this credit client's negotiated rate and invoiced to them on their own
+              billing cycle (monthly or weekly) instead of the patient paying now.
+            </p>
+          </>
+        )}
+
+        {billingType === 'REFERRAL' && (
+          <>
+            <label style={{ maxWidth: 340 }}><span>Referred By (Doctor)</span>
+              <input
+                list="doctor-suggestions"
+                value={doctorName}
+                onChange={(e) => setDoctorName(e.target.value)}
+                placeholder="Doctor's name"
+              />
+              <datalist id="doctor-suggestions">
+                {doctors.map((d) => <option key={d.id} value={d.name} />)}
+              </datalist>
+            </label>
+            <p style={{ fontSize: 12, color: '#94a3b8', marginTop: -10, marginBottom: 14 }}>
+              The patient still pays at the counter; the doctor is recorded for commission tracking.
+            </p>
+          </>
+        )}
 
         <form onSubmit={handleSearch} className="form-grid" style={{ alignItems: 'end' }}>
           <label><span>Search by UMR or Mobile</span>
@@ -229,7 +319,9 @@ export default function FrontDesk() {
               <div className="search-select-results" style={{ position: 'absolute', top: '100%', marginTop: 4 }}>
                 {testSuggestions.slice(0, 30).map((p) => (
                   <div key={p.id} className="search-select-item" onClick={() => addTest(p.testId)}>
-                    {p.TestMaster?.testName} <span style={{ color: '#64748b' }}>· ₹{p.price}</span>
+                    {p.TestMaster?.testName}
+                    {p.shortName && <span style={{ color: '#94a3b8' }}> ({p.shortName})</span>}
+                    <span style={{ color: '#64748b' }}> · ₹{effectivePrice(p)}</span>
                   </div>
                 ))}
                 {testSuggestions.length === 0 && <div className="search-select-item search-select-empty">No matching tests</div>}
@@ -243,7 +335,7 @@ export default function FrontDesk() {
                 <div className="selected-item-row" key={p.id}>
                   <span>{p.TestMaster?.testName}</span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    ₹{p.price}
+                    ₹{effectivePrice(p)}
                     <button type="button" onClick={() => removeTest(p.testId)}>Remove</button>
                   </span>
                 </div>
@@ -271,21 +363,45 @@ export default function FrontDesk() {
           <div className="review-box-row"><span>Net Payable</span><span>₹{netPayable}</span></div>
         </div>
 
+        {isCredit && (
+          <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 0, marginBottom: 14 }}>
+            No payment mode needed — this bill is charged to the credit client and settled later, not paid at the counter.
+          </p>
+        )}
+
         <div className="form-grid">
-          <label><span>Payment Mode</span>
-            <select value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)}>
-              <option>Cash</option><option>Card</option><option>UPI</option><option>Insurance</option>
-            </select>
-          </label>
+          {!isCredit && (
+            <label><span>Payment Mode *</span>
+              <select value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)} required>
+                <option value="">— Select —</option>
+                <option>Cash</option><option>Card</option><option>UPI</option><option>Insurance</option>
+              </select>
+            </label>
+          )}
           <label><span>Address (optional)</span>
             <input value={visitAddress} onChange={(e) => setVisitAddress(e.target.value)} />
           </label>
-          <label><span>Remarks (optional)</span>
-            <input value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Any notes…" />
+          {needsTransactionNumber && (
+            <label><span>Payment Transaction Number *</span>
+              <input
+                value={transactionNumber}
+                onChange={(e) => setTransactionNumber(e.target.value)}
+                placeholder={`${paymentMode} reference / transaction ID`}
+                required
+              />
+            </label>
+          )}
+          <label><span>Remarks{discountGiven ? ' *' : ' (optional)'}</span>
+            <input
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
+              placeholder={discountGiven ? 'Required — reason for the discount' : 'Any notes…'}
+              required={discountGiven}
+            />
           </label>
         </div>
         {error && <p className="error-text">{error}</p>}
-        <button onClick={handleGenerateBill} disabled={selectedTests.length === 0}>Generate Bill</button>
+        <button onClick={handleGenerateBill} disabled={selectedTests.length === 0 || (!isCredit && !paymentMode)}>Generate Bill</button>
       </div>
     </div>
   );

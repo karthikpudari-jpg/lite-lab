@@ -24,15 +24,29 @@ export default function BillPrint() {
       </div>
 
       <div className="report-sheet">
-        <h3>Bill / Receipt — Order {bill.billNo}</h3>
+        {bill.Client?.reportLogoPath && (
+          <div className="report-header">
+            <img src={bill.Client.reportLogoPath} alt="Logo" className="report-logo" />
+            <div>
+              <h2 style={{ margin: 0 }}>{bill.Client.clientName}</h2>
+              <p style={{ margin: 0, color: '#64748b', fontSize: 13 }}>
+                {[bill.Client.address, bill.Client.mobile, bill.Client.email].filter(Boolean).join(' · ')}
+              </p>
+            </div>
+          </div>
+        )}
+
+        <h3 style={{ marginTop: bill.Client?.reportLogoPath ? 24 : 0 }}>Bill / Receipt — Order {bill.billNo}</h3>
         <div className="report-patient-grid">
           <div><span>UMR</span><strong>{bill.Patient?.umr}</strong></div>
           <div><span>Patient Name</span><strong>{bill.Patient?.name}</strong></div>
           <div><span>Age / Gender</span><strong>{bill.Patient?.age || '—'} / {bill.Patient?.gender || '—'}</strong></div>
           <div><span>Mobile</span><strong>{bill.Patient?.mobile || '—'}</strong></div>
           <div><span>Referred By</span><strong>{bill.ReferralDoctor?.name ? `Dr. ${bill.ReferralDoctor.name}` : 'Self'}</strong></div>
+          <div><span>Billed To</span><strong>{bill.Payor?.name || 'Self / Direct'}</strong></div>
           <div><span>Walk-in Date</span><strong>{bill.walkInDate}</strong></div>
-          <div><span>Payment Mode</span><strong>{bill.paymentMode}</strong></div>
+          <div><span>Payment Mode</span><strong>{bill.paymentMode || (bill.Payor ? 'Credit (billed to payor)' : '—')}</strong></div>
+          {bill.transactionNumber && <div><span>Transaction Number</span><strong>{bill.transactionNumber}</strong></div>}
         </div>
 
         <table style={{ marginTop: 24 }}>

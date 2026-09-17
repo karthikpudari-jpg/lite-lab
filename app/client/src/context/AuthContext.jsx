@@ -53,7 +53,11 @@ export function AuthProvider({ children }) {
 
   function markPaid() {
     if (!auth) return;
-    const next = { ...auth, client: { ...auth.client, paymentStatus: 'PAID' } };
+    // lastPaymentAt always changes, even when paymentStatus was already PAID
+    // (an advance top-up while already paid) - components that need to
+    // refetch payment/subscription details after any payment should key off
+    // this instead of paymentStatus, which wouldn't change in that case.
+    const next = { ...auth, client: { ...auth.client, paymentStatus: 'PAID' }, lastPaymentAt: Date.now() };
     persist(next);
     setPaymentRequired(false);
   }

@@ -26,7 +26,7 @@ export default function Orders() {
     <div className="card">
       <div className="topbar">
         <h3 style={{ margin: 0 }}>Orders</h3>
-        <input placeholder="Search by Order ID, UMR, name or mobile…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 280 }} />
+        <input placeholder="Search by Order ID, UMR, name or mobile…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 280, maxWidth: '100%' }} />
       </div>
       <table>
         <thead>

@@ -25,7 +25,8 @@ export default function SalesDashboard() {
   const totals = summary.reduce((acc, s) => ({
     clientCount: acc.clientCount + s.clientCount,
     totalMonthlyRevenue: acc.totalMonthlyRevenue + s.totalMonthlyRevenue,
-  }), { clientCount: 0, totalMonthlyRevenue: 0 });
+    totalMarketingPersonPrice: acc.totalMarketingPersonPrice + (s.totalMarketingPersonPrice || 0),
+  }), { clientCount: 0, totalMonthlyRevenue: 0, totalMarketingPersonPrice: 0 });
 
   return (
     <div>
@@ -40,6 +41,7 @@ export default function SalesDashboard() {
         <div className="stat-tile"><div className="value">{summary.length}</div><div className="label">Marketing Persons</div></div>
         <div className="stat-tile"><div className="value">{totals.clientCount}</div><div className="label">Total Clients Onboarded</div></div>
         <div className="stat-tile"><div className="value">₹{totals.totalMonthlyRevenue}</div><div className="label">Total Monthly Revenue</div></div>
+        <div className="stat-tile"><div className="value">₹{totals.totalMarketingPersonPrice}</div><div className="label">Total Marketing Person Price</div></div>
       </div>
 
       <div className="card">
@@ -47,7 +49,7 @@ export default function SalesDashboard() {
         <table>
           <thead>
             <tr>
-              <th>Sales Person</th><th>Clients Onboarded</th><th>Total Monthly Revenue</th>
+              <th>Sales Person</th><th>Clients Onboarded</th><th>Marketing Person Price</th><th>Total Monthly Revenue</th>
               <th>Paid</th><th>Pending</th><th>Expired</th>
             </tr>
           </thead>
@@ -56,13 +58,14 @@ export default function SalesDashboard() {
               <tr key={s.salesPerson}>
                 <td>{s.name} <span style={{ color: '#94a3b8', fontSize: 12 }}>({s.salesPerson})</span></td>
                 <td>{s.clientCount}</td>
+                <td>₹{s.totalMarketingPersonPrice}</td>
                 <td>₹{s.totalMonthlyRevenue}</td>
                 <td><span className="badge PAID">{s.paid}</span></td>
                 <td><span className="badge PENDING">{s.pending}</span></td>
                 <td><span className="badge EXPIRED">{s.expired}</span></td>
               </tr>
             ))}
-            {summary.length === 0 && <tr><td colSpan={6}>No marketing persons or client attributions yet.</td></tr>}
+            {summary.length === 0 && <tr><td colSpan={7}>No marketing persons or client attributions yet.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -70,11 +73,11 @@ export default function SalesDashboard() {
       <div className="card">
         <div className="topbar">
           <h3 style={{ margin: 0 }}>Client Details</h3>
-          <input placeholder="Search by sales person, client code or name…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 300 }} />
+          <input placeholder="Search by sales person, client code or name…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 300, maxWidth: '100%' }} />
         </div>
         <table>
           <thead>
-            <tr><th>Sales Person</th><th>Client Code</th><th>Client Name</th><th>Monthly Amount</th><th>Status</th><th>Created On</th></tr>
+            <tr><th>Sales Person</th><th>Client Code</th><th>Client Name</th><th>Marketing Person Price</th><th>Monthly Amount</th><th>Status</th><th>Created On</th></tr>
           </thead>
           <tbody>
             {filteredDetails.map((d) => (
@@ -82,12 +85,13 @@ export default function SalesDashboard() {
                 <td>{d.salesPerson}</td>
                 <td>{d.clientCode}</td>
                 <td>{d.clientName}</td>
+                <td>₹{d.marketingPersonPrice}</td>
                 <td>₹{d.monthlyAmount}</td>
                 <td><span className={`badge ${d.paymentStatus}`}>{d.paymentStatus}</span></td>
                 <td>{new Date(d.createdAt).toLocaleDateString()}</td>
               </tr>
             ))}
-            {filteredDetails.length === 0 && <tr><td colSpan={6}>No clients found.</td></tr>}
+            {filteredDetails.length === 0 && <tr><td colSpan={7}>No clients found.</td></tr>}
           </tbody>
         </table>
       </div>

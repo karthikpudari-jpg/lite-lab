@@ -14,5 +14,6 @@ router.get('/lab-summary', reportCtrl.labSummary);
 router.get('/lab-details', reportCtrl.labDetails);
 router.get('/test-wise-revenue', reportCtrl.testWiseRevenue);
 router.get('/report-status', reportCtrl.reportStatusCounts);
+router.get('/export', reportCtrl.exportReport);
 
 module.exports = router;

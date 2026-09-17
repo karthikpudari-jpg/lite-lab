@@ -16,6 +16,21 @@ async function markPaid({ payment, subscription, gatewayResponse, transactionId,
       paymentDate: new Date(),
       gatewayResponse: gatewayResponse || payment.gatewayResponse,
     });
+
+    // A due cycle's dates are fixed at the time it was scheduled, so paying
+    // it on time or late both used to just settle whatever was left of that
+    // pre-set range - e.g. paying on the 16th for a cycle that already ends
+    // on the 30th only bought 14 days. Once payment actually happens on or
+    // after the cycle's start, it should instead run a full month from today
+    // (the actual payment date), so "pay for 1 month" always means a month
+    // from now. Paying genuinely in advance, before the cycle even starts,
+    // is left untouched so advance cycles stay on their scheduled dates.
+    const today = new Date();
+    if (today >= new Date(subscription.fromDate)) {
+      const newToDate = new Date(today);
+      newToDate.setMonth(newToDate.getMonth() + 1);
+      await subscription.update({ fromDate: today, toDate: newToDate, dueDate: newToDate });
+    }
   }
   if (subscription.status !== 'PAID') {
     await subscription.update({ status: 'PAID' });
@@ -124,11 +139,17 @@ async function razorpayWebhook(req, res) {
 async function paymentStatus(req, res) {
   const { clientId } = req.user;
   const subscription = await getOrCreateCurrentSubscription(clientId);
+  // toDate is just the cycle covering today, which doesn't move when paying
+  // further in advance (the new cycles are chained on after it, not into
+  // it) - paidThrough is the true furthest-paid date, so an advance payment
+  // visibly extends what the client sees here, not just the Chief Admin side.
+  const paidThrough = await getPaidThroughDate(clientId);
   return res.json({
     status: subscription.status,
     month: subscription.month,
     toDate: subscription.toDate,
     dueDate: subscription.dueDate,
+    paidThrough,
   });
 }
 

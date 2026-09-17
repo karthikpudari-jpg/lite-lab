@@ -48,6 +48,29 @@ const NotificationTemplate = sequelize.define('NotificationTemplate', {
   ...AUDIT_FIELDS,
 }, { tableName: 'notification_template' });
 
+// ---- ROLE -> SCREEN ACCESS (which nav screens a client-side role can see) ----
+// Platform-wide baseline, set by Chief Admin - the ceiling every client's own
+// override is checked against (a client can narrow this, never widen it).
+const RoleScreenDefault = sequelize.define('RoleScreenDefault', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  role: { type: DataTypes.STRING, unique: true, allowNull: false },
+  screens: { type: DataTypes.JSON, allowNull: false, defaultValue: [] },
+  ...AUDIT_FIELDS,
+}, { tableName: 'role_screen_default' });
+
+// Per-client override - lets each client's own ADMIN restrict which screens
+// their FRONT_OFFICE/LAB_USER/MANAGER/MASTER_MANAGER staff can see.
+const ClientRoleScreen = sequelize.define('ClientRoleScreen', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  clientId: { type: DataTypes.INTEGER, allowNull: false },
+  role: { type: DataTypes.STRING, allowNull: false },
+  screens: { type: DataTypes.JSON, allowNull: false, defaultValue: [] },
+  ...AUDIT_FIELDS,
+}, {
+  tableName: 'client_role_screen',
+  indexes: [{ unique: true, fields: ['clientId', 'role'] }],
+});
+
 // ---- CLIENT --------------------------------------------------------------
 const Client = sequelize.define('Client', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
@@ -57,6 +80,11 @@ const Client = sequelize.define('Client', {
   email: { type: DataTypes.STRING },
   address: { type: DataTypes.STRING },
   salesPerson: { type: DataTypes.STRING },
+  // Extra monthly amount for the marketing person's involvement in this client
+  // (e.g. an onboarding/referral fee), added on top of the plan price
+  // (calculatePlanAmount) to make up monthlyAmount - so it's billed to the
+  // client every cycle and multiplies correctly for 3/6/12-month payments.
+  marketingPersonPrice: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
   monthlyAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
   paymentStatus: {
     type: DataTypes.ENUM('PAID', 'PENDING', 'EXPIRED'),
@@ -144,6 +172,9 @@ const TestMaster = sequelize.define('TestMaster', {
   ...AUDIT_FIELDS,
 }, { tableName: 'test_master' });
 
+// clientId is null for a universal parameter (created by Chief Admin, shared
+// across every client) and set for a parameter a client added for themselves
+// - which only that client ever sees, exactly like their own test prices.
 const ParameterMaster = sequelize.define('ParameterMaster', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   parameterName: { type: DataTypes.STRING, allowNull: false },
@@ -152,6 +183,17 @@ const ParameterMaster = sequelize.define('ParameterMaster', {
   normalRangeHigh: { type: DataTypes.STRING },
   ...AUDIT_FIELDS,
 }, { tableName: 'parameter_master' });
+
+// A client's own shortcut/abbreviated name for a test (e.g. for quick search
+// or a compact report layout), set per client just like ClientTestPrice.
+const ClientTestShortName = sequelize.define('ClientTestShortName', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  shortName: { type: DataTypes.STRING, allowNull: false },
+  ...AUDIT_FIELDS,
+}, {
+  tableName: 'client_test_short_name',
+  indexes: [{ unique: true, fields: ['clientId', 'testId'] }],
+});
 
 const ClientTestPrice = sequelize.define('ClientTestPrice', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
@@ -175,6 +217,84 @@ const Package = sequelize.define('Package', {
   tableName: 'package',
   indexes: [{ unique: true, fields: ['clientId', 'packageCode'] }],
 });
+
+// A Payor is a third party (corporate, TPA, insurer) that a client bills in
+// bulk each month instead of the patient paying at the counter - it gets its
+// own negotiated price per test, separate from the client's standard price.
+const Payor = sequelize.define('Payor', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  name: { type: DataTypes.STRING, allowNull: false },
+  contactPerson: { type: DataTypes.STRING },
+  mobile: { type: DataTypes.STRING },
+  email: { type: DataTypes.STRING },
+  address: { type: DataTypes.STRING },
+  // How often this credit client is invoiced for the patients billed to it.
+  billingCycle: { type: DataTypes.ENUM('MONTHLY', 'WEEKLY'), allowNull: false, defaultValue: 'MONTHLY' },
+  active: { type: DataTypes.BOOLEAN, defaultValue: true },
+  ...AUDIT_FIELDS,
+}, {
+  tableName: 'payor',
+  indexes: [{ unique: true, fields: ['clientId', 'name'] }],
+});
+
+const PayorTestPrice = sequelize.define('PayorTestPrice', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  price: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+  ...AUDIT_FIELDS,
+}, {
+  tableName: 'payor_test_price',
+  indexes: [{ unique: true, fields: ['payorId', 'testId'] }],
+});
+
+// A monthly bill sent to one Payor, covering every test done under its name
+// that month. Line items snapshot both the client's standard price and the
+// payor's negotiated price at generation time, so the invoice stays accurate
+// even if prices change later.
+const PayorInvoice = sequelize.define('PayorInvoice', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  invoiceNo: { type: DataTypes.STRING, allowNull: false, unique: true },
+  month: { type: DataTypes.STRING, allowNull: false }, // YYYY-MM
+  fromDate: { type: DataTypes.DATEONLY, allowNull: false },
+  toDate: { type: DataTypes.DATEONLY, allowNull: false },
+  totalOriginal: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
+  totalAssigned: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
+  totalDifference: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
+  totalCollected: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
+  totalDeduction: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
+  status: {
+    type: DataTypes.ENUM('PENDING', 'PARTIALLY_COLLECTED', 'COLLECTED'),
+    allowNull: false,
+    defaultValue: 'PENDING',
+  },
+  ...AUDIT_FIELDS,
+}, {
+  tableName: 'payor_invoice',
+  indexes: [{ unique: true, fields: ['payorId', 'month'] }],
+});
+
+const PayorInvoiceItem = sequelize.define('PayorInvoiceItem', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  testName: { type: DataTypes.STRING, allowNull: false },
+  // Snapshotted at generation time (like testName/originalPrice/assignedPrice)
+  // so the invoice's detail/summary views keep showing the right patient and
+  // order number even if the patient record changes later.
+  patientName: { type: DataTypes.STRING },
+  billNo: { type: DataTypes.STRING },
+  originalPrice: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+  assignedPrice: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+  difference: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+  ...AUDIT_FIELDS,
+}, { tableName: 'payor_invoice_item' });
+
+const PayorInvoiceCollection = sequelize.define('PayorInvoiceCollection', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  amount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+  paymentType: { type: DataTypes.ENUM('CASH', 'CARD', 'UPI'), allowNull: false },
+  discount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
+  collectedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+  remarks: { type: DataTypes.STRING },
+  ...AUDIT_FIELDS,
+}, { tableName: 'payor_invoice_collection' });
 
 // ---- PATIENT / BILLING -----------------------------------------------------
 const Patient = sequelize.define('Patient', {
@@ -216,6 +336,7 @@ const Bill = sequelize.define('Bill', {
   paidAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
   paymentMode: { type: DataTypes.STRING },
   visitAddress: { type: DataTypes.STRING },
+  transactionNumber: { type: DataTypes.STRING },
   remarks: { type: DataTypes.STRING },
   ...AUDIT_FIELDS,
 }, { tableName: 'bill' });
@@ -223,6 +344,10 @@ const Bill = sequelize.define('Bill', {
 const BillItem = sequelize.define('BillItem', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   price: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+  // The client's standard price at billing time - equal to `price` for a
+  // normal walk-in, but kept separately so a Payor invoice can show the
+  // discount given (originalPrice - price) even after prices change later.
+  originalPrice: { type: DataTypes.DECIMAL(10, 2) },
   ...AUDIT_FIELDS,
 }, { tableName: 'bill_item' });
 
@@ -302,6 +427,16 @@ ClientTestPrice.belongsTo(Client, { foreignKey: 'clientId' });
 TestMaster.hasMany(ClientTestPrice, { foreignKey: 'testId' });
 ClientTestPrice.belongsTo(TestMaster, { foreignKey: 'testId' });
 
+// Nullable - a universal parameter (clientId null) has no Client row to cascade from.
+Client.hasMany(ParameterMaster, { foreignKey: 'clientId', onDelete: 'CASCADE' });
+ParameterMaster.belongsTo(Client, { foreignKey: 'clientId' });
+
+Client.hasMany(ClientTestShortName, { foreignKey: 'clientId', onDelete: 'CASCADE' });
+ClientTestShortName.belongsTo(Client, { foreignKey: 'clientId' });
+
+TestMaster.hasMany(ClientTestShortName, { foreignKey: 'testId' });
+ClientTestShortName.belongsTo(TestMaster, { foreignKey: 'testId' });
+
 Client.hasMany(Package, { foreignKey: 'clientId', onDelete: 'CASCADE' });
 Package.belongsTo(Client, { foreignKey: 'clientId' });
 
@@ -317,8 +452,32 @@ Patient.belongsTo(Client, { foreignKey: 'clientId' });
 Client.hasMany(ReferralDoctor, { foreignKey: 'clientId', onDelete: 'CASCADE' });
 ReferralDoctor.belongsTo(Client, { foreignKey: 'clientId' });
 
+Client.hasMany(Payor, { foreignKey: 'clientId', onDelete: 'CASCADE' });
+Payor.belongsTo(Client, { foreignKey: 'clientId' });
+
+Payor.hasMany(PayorTestPrice, { foreignKey: 'payorId', onDelete: 'CASCADE' });
+PayorTestPrice.belongsTo(Payor, { foreignKey: 'payorId' });
+TestMaster.hasMany(PayorTestPrice, { foreignKey: 'testId' });
+PayorTestPrice.belongsTo(TestMaster, { foreignKey: 'testId' });
+
+Client.hasMany(PayorInvoice, { foreignKey: 'clientId', onDelete: 'CASCADE' });
+PayorInvoice.belongsTo(Client, { foreignKey: 'clientId' });
+Payor.hasMany(PayorInvoice, { foreignKey: 'payorId', onDelete: 'CASCADE' });
+PayorInvoice.belongsTo(Payor, { foreignKey: 'payorId' });
+
+PayorInvoice.hasMany(PayorInvoiceItem, { foreignKey: 'payorInvoiceId', onDelete: 'CASCADE' });
+PayorInvoiceItem.belongsTo(PayorInvoice, { foreignKey: 'payorInvoiceId' });
+PayorInvoiceItem.belongsTo(Bill, { foreignKey: 'billId' });
+PayorInvoiceItem.belongsTo(BillItem, { foreignKey: 'billItemId' });
+
+PayorInvoice.hasMany(PayorInvoiceCollection, { foreignKey: 'payorInvoiceId', onDelete: 'CASCADE' });
+PayorInvoiceCollection.belongsTo(PayorInvoice, { foreignKey: 'payorInvoiceId' });
+
 Client.hasMany(Bill, { foreignKey: 'clientId', onDelete: 'CASCADE' });
 Bill.belongsTo(Client, { foreignKey: 'clientId' });
+
+Payor.hasMany(Bill, { foreignKey: 'payorId' });
+Bill.belongsTo(Payor, { foreignKey: 'payorId' });
 
 Patient.hasMany(Bill, { foreignKey: 'patientId' });
 Bill.belongsTo(Patient, { foreignKey: 'patientId' });
@@ -403,6 +562,8 @@ module.exports = {
   ChiefAdmin,
   NotificationSetting,
   NotificationTemplate,
+  RoleScreenDefault,
+  ClientRoleScreen,
   Client,
   ClientSubscription,
   ClientPayment,
@@ -411,10 +572,16 @@ module.exports = {
   ClientUser,
   TestMaster,
   ParameterMaster,
+  ClientTestShortName,
   ClientTestPrice,
   Package,
   Patient,
   ReferralDoctor,
+  Payor,
+  PayorTestPrice,
+  PayorInvoice,
+  PayorInvoiceItem,
+  PayorInvoiceCollection,
   Bill,
   BillItem,
   Sample,

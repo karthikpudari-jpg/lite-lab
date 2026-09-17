@@ -12,9 +12,12 @@ import ChiefAdminTickets from './pages/ChiefAdmin/Tickets';
 import Integrations from './pages/ChiefAdmin/Integrations';
 import SalesDashboard from './pages/ChiefAdmin/SalesDashboard';
 import TeamPasswordReset from './pages/ChiefAdmin/TeamPasswordReset';
+import RoleScreenDefaults from './pages/ChiefAdmin/RoleScreenDefaults';
 import ResetPassword from './pages/ResetPassword';
 import Masters from './pages/Admin/Masters';
+import Payors from './pages/Admin/Payors';
 import Tickets from './pages/Admin/Tickets';
+import RoleScreens from './pages/Admin/RoleScreens';
 import FrontDesk from './pages/FrontOffice/FrontDesk';
 import Orders from './pages/FrontOffice/Orders';
 import BillPrint from './pages/FrontOffice/BillPrint';
@@ -22,6 +25,9 @@ import Laboratory from './pages/Lab/Laboratory';
 import LabReport from './pages/Lab/LabReport';
 import Reports from './pages/Manager/Reports';
 import ReportBranding from './pages/Manager/ReportBranding';
+import PayorInvoices from './pages/Manager/PayorInvoices';
+import PayorInvoiceView from './pages/Manager/PayorInvoiceView';
+import TestParameters from './pages/Manager/TestParameters';
 
 export default function App() {
   return (
@@ -41,6 +47,7 @@ export default function App() {
         <Route path="integrations" element={<ProtectedRoute type="CHIEF_ADMIN" roles={['ADMIN']}><Integrations /></ProtectedRoute>} />
         <Route path="sales-dashboard" element={<ProtectedRoute type="CHIEF_ADMIN" roles={['ADMIN']}><SalesDashboard /></ProtectedRoute>} />
         <Route path="team-passwords" element={<ProtectedRoute type="CHIEF_ADMIN" roles={['MARKETING']}><TeamPasswordReset /></ProtectedRoute>} />
+        <Route path="role-screen-defaults" element={<ProtectedRoute type="CHIEF_ADMIN" roles={['ADMIN']}><RoleScreenDefaults /></ProtectedRoute>} />
         <Route path="reset-password" element={<ProtectedRoute type="CHIEF_ADMIN"><ResetPassword /></ProtectedRoute>} />
       </Route>
 
@@ -50,6 +57,7 @@ export default function App() {
       >
         <Route index element={<AppHome />} />
         <Route path="masters" element={<ProtectedRoute type="CLIENT_USER" roles={['MASTER_MANAGER']}><Masters /></ProtectedRoute>} />
+        <Route path="payors" element={<ProtectedRoute type="CLIENT_USER" roles={['MASTER_MANAGER']}><Payors /></ProtectedRoute>} />
         <Route path="tickets" element={<Tickets />} />
         <Route path="billing" element={<ProtectedRoute type="CLIENT_USER" roles={['FRONT_OFFICE']}><FrontDesk /></ProtectedRoute>} />
         <Route path="orders" element={<ProtectedRoute type="CLIENT_USER" roles={['FRONT_OFFICE']}><Orders /></ProtectedRoute>} />
@@ -58,6 +66,10 @@ export default function App() {
         <Route path="report/:billId" element={<ProtectedRoute type="CLIENT_USER" roles={['LAB_USER', 'FRONT_OFFICE', 'MANAGER']}><LabReport /></ProtectedRoute>} />
         <Route path="reports" element={<ProtectedRoute type="CLIENT_USER" roles={['MANAGER']}><Reports /></ProtectedRoute>} />
         <Route path="report-branding" element={<ProtectedRoute type="CLIENT_USER" roles={['MANAGER']}><ReportBranding /></ProtectedRoute>} />
+        <Route path="payor-invoices" element={<ProtectedRoute type="CLIENT_USER" roles={['MANAGER']}><PayorInvoices /></ProtectedRoute>} />
+        <Route path="payor-invoices/:invoiceId" element={<ProtectedRoute type="CLIENT_USER" roles={['MANAGER']}><PayorInvoiceView /></ProtectedRoute>} />
+        <Route path="test-parameters" element={<ProtectedRoute type="CLIENT_USER" roles={['MANAGER', 'MASTER_MANAGER']}><TestParameters /></ProtectedRoute>} />
+        <Route path="role-screens" element={<ProtectedRoute type="CLIENT_USER" roles={['ADMIN']}><RoleScreens /></ProtectedRoute>} />
         <Route path="reset-password" element={<ProtectedRoute type="CLIENT_USER"><ResetPassword /></ProtectedRoute>} />
       </Route>
 

@@ -10,5 +10,6 @@ const labCtrl = require('../controllers/lab.controller');
 router.use(authenticate, requireActiveSubscription, requireRole(ROLES.FRONT_OFFICE, ROLES.LAB_USER, ROLES.MANAGER));
 
 router.get('/bills/:billId/report', labCtrl.getBillReport);
+router.get('/bills/:billId/trend', labCtrl.getBillTrendReport);
 
 module.exports = router;

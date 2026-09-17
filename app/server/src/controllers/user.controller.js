@@ -38,11 +38,12 @@ async function createUser(req, res) {
   const user = await ClientUser.create({ clientId, username, passwordHash, name, email, mobile });
   await user.setRoles(roles);
 
-  // Basic plan covers 2 users at ₹1500/month; each user beyond that adds ₹500/month.
+  // Basic plan covers 2 users at ₹1500/month; each user beyond that adds ₹500/month,
+  // plus this client's marketing person price (if any) stays included in the total.
   // Already-created subscription cycles keep their locked-in price - this only
   // affects future cycles.
   const userCount = await ClientUser.count({ where: { clientId } });
-  await client.update({ monthlyAmount: calculatePlanAmount(userCount) });
+  await client.update({ monthlyAmount: calculatePlanAmount(userCount) + Number(client.marketingPersonPrice || 0) });
 
   return res.status(201).json({ id: user.id, username: user.username, roles: roles.map((r) => r.name) });
 }

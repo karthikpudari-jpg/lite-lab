@@ -15,11 +15,12 @@ function todayISO() {
 
 export default function ClientCreate() {
   const [form, setForm] = useState({
-    clientCode: '', clientName: '', mobile: '', email: '', address: '', salesPerson: '',
+    clientCode: '', clientName: '', mobile: '', email: '', address: '', salesPerson: '', marketingPersonPrice: '0',
     startDate: todayISO(), endDate: '',
   });
   const [userCount, setUserCount] = useState(1);
   const [userRows, setUserRows] = useState([blankUser()]);
+  const [monthlyAmountOverride, setMonthlyAmountOverride] = useState(null); // null = auto-calculated from the plan
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,6 +32,9 @@ export default function ClientCreate() {
   }, []);
 
   function update(field, value) { setForm((f) => ({ ...f, [field]: value })); }
+
+  const calculatedMonthlyAmount = calculatePlanAmount(userCount) + (Number(form.marketingPersonPrice) || 0);
+  const totalMonthlyAmount = monthlyAmountOverride ?? calculatedMonthlyAmount;
 
   function handleUserCountChange(value) {
     const count = Math.max(1, Math.min(20, Number(value) || 1));
@@ -71,7 +75,9 @@ export default function ClientCreate() {
 
     setLoading(true);
     try {
-      const { data } = await api.post('/clients', { ...form, users: userRows });
+      const payload = { ...form, users: userRows };
+      if (monthlyAmountOverride != null) payload.monthlyAmount = monthlyAmountOverride;
+      const { data } = await api.post('/clients', payload);
       setResult(data);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create client');
@@ -84,7 +90,7 @@ export default function ClientCreate() {
     return (
       <div className="card">
         <h3>Client "{result.client.clientName}" created (Code: {result.client.clientCode})</h3>
-        <p>Subscription: {form.startDate} to {form.endDate} · ₹{calculatePlanAmount(result.users.length)}/month</p>
+        <p>Subscription: {form.startDate} to {form.endDate} · ₹{result.client.monthlyAmount}/month</p>
         <table>
           <thead><tr><th>Username</th><th>Roles</th></tr></thead>
           <tbody>
@@ -116,6 +122,9 @@ export default function ClientCreate() {
               placeholder="Search marketing person…"
             />
           </div>
+          <label><span>Marketing Person Price (₹/month)</span>
+            <input type="number" min={0} value={form.marketingPersonPrice} onChange={(e) => update('marketingPersonPrice', e.target.value)} />
+          </label>
           <label><span>Subscription Start Date</span>
             <input type="date" value={form.startDate} onChange={(e) => update('startDate', e.target.value)} required />
           </label>
@@ -125,12 +134,28 @@ export default function ClientCreate() {
           <label><span>Number of Users</span>
             <input type="number" min={1} max={20} value={userCount} onChange={(e) => handleUserCountChange(e.target.value)} />
           </label>
-          <label><span>Monthly Subscription Amount</span>
-            <input value={`₹${calculatePlanAmount(userCount)}`} disabled />
-          </label>
+          <div>
+            <span style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13 }}>Monthly Subscription Amount</span>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="number"
+                min={0}
+                value={totalMonthlyAmount}
+                onChange={(e) => setMonthlyAmountOverride(e.target.value === '' ? 0 : Number(e.target.value))}
+              />
+              {monthlyAmountOverride != null && (
+                <button type="button" className="secondary" onClick={() => setMonthlyAmountOverride(null)}>
+                  Reset
+                </button>
+              )}
+            </div>
+          </div>
         </div>
         <p style={{ fontSize: 13, color: '#64748b', marginTop: -8 }}>
-          Plan: ₹{BASE_MONTHLY_AMOUNT}/month covers {BASE_USER_COUNT} users, +₹{EXTRA_USER_AMOUNT}/month per additional user.
+          Plan: ₹{BASE_MONTHLY_AMOUNT}/month covers {BASE_USER_COUNT} users, +₹{EXTRA_USER_AMOUNT}/month per additional
+          user, + Marketing Person Price if set — auto-calculated as ₹{calculatedMonthlyAmount}/month above, but you
+          can type a different amount to override it for this client (e.g. a custom negotiated rate). This is what's
+          billed every month, and multiplies exactly for 3/6/12-month advance payments.
         </p>
 
         <h4>Users</h4>

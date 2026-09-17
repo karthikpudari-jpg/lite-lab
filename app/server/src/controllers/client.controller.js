@@ -53,11 +53,13 @@ async function createInitialSubscription(client, t, range) {
 
 // POST /api/clients  (Chief Admin)
 // Body: { clientCode, clientName, ..., startDate, endDate, users: [{ username, password, name, roleName }] }
-// monthlyAmount is never taken from the request - it's always derived from
-// the plan: ₹1500/month covers 2 users, +₹500/month for each user beyond that.
+// monthlyAmount defaults to the plan (₹2000/month covers 2 users, +₹500/month
+// for each user beyond that) plus marketingPersonPrice, but Chief Admin can
+// override it with an explicit monthlyAmount in the request (e.g. a custom
+// negotiated rate) - if given, that figure is used as-is instead.
 async function createClient(req, res) {
   const {
-    clientCode, clientName, mobile, email, address, salesPerson,
+    clientCode, clientName, mobile, email, address, salesPerson, marketingPersonPrice, monthlyAmount: monthlyAmountOverride,
     startDate, endDate, users,
   } = req.body;
 
@@ -82,13 +84,24 @@ async function createClient(req, res) {
     }
   }
 
-  const monthlyAmount = calculatePlanAmount(userList.length);
+  const marketingFee = Number(marketingPersonPrice) || 0;
+  if (marketingFee < 0) return res.status(400).json({ message: 'marketingPersonPrice cannot be negative' });
+
+  let monthlyAmount;
+  if (monthlyAmountOverride != null && monthlyAmountOverride !== '') {
+    monthlyAmount = Number(monthlyAmountOverride);
+    if (Number.isNaN(monthlyAmount) || monthlyAmount < 0) {
+      return res.status(400).json({ message: 'monthlyAmount must be a non-negative number' });
+    }
+  } else {
+    monthlyAmount = calculatePlanAmount(userList.length) + marketingFee;
+  }
 
   try {
     const result = await sequelize.transaction(async (t) => {
       const client = await Client.create({
         clientCode, clientName, mobile, email, address, salesPerson,
-        monthlyAmount, paymentStatus: 'PENDING',
+        marketingPersonPrice: marketingFee, monthlyAmount, paymentStatus: 'PENDING',
       }, { transaction: t });
 
       await createInitialSubscription(client, t, { from: startDate, to: endDate });
@@ -160,6 +173,7 @@ async function listClients(req, res) {
     mobile: c.mobile,
     email: c.email,
     salesPerson: c.salesPerson,
+    marketingPersonPrice: c.marketingPersonPrice,
     monthlyAmount: c.monthlyAmount,
     paymentStatus: c.paymentStatus,
     active: c.active,
@@ -183,19 +197,33 @@ async function getClient(req, res) {
 }
 
 // PUT /api/clients/:id
-// monthlyAmount is intentionally not editable here - it's always derived
-// from the plan (see calculatePlanAmount), kept in sync as users are added.
+// monthlyAmount itself is intentionally not directly editable here - it's
+// always derived from the plan (see calculatePlanAmount) plus
+// marketingPersonPrice, recomputed here whenever marketingPersonPrice changes
+// so a later adjustment still bills correctly from the next cycle.
 async function updateClient(req, res) {
   const client = await Client.findByPk(req.params.id);
   if (!client) return res.status(404).json({ message: 'Client not found' });
 
-  const { clientName, mobile, email, address, salesPerson, active } = req.body;
+  const { clientName, mobile, email, address, salesPerson, marketingPersonPrice, active } = req.body;
+
+  let monthlyAmount = client.monthlyAmount;
+  let marketingFee = client.marketingPersonPrice;
+  if (marketingPersonPrice != null) {
+    marketingFee = Number(marketingPersonPrice) || 0;
+    if (marketingFee < 0) return res.status(400).json({ message: 'marketingPersonPrice cannot be negative' });
+    const userCount = await ClientUser.count({ where: { clientId: client.id } });
+    monthlyAmount = calculatePlanAmount(userCount) + marketingFee;
+  }
+
   await client.update({
     clientName: clientName ?? client.clientName,
     mobile: mobile ?? client.mobile,
     email: email ?? client.email,
     address: address ?? client.address,
     salesPerson: salesPerson ?? client.salesPerson,
+    marketingPersonPrice: marketingFee,
+    monthlyAmount,
     active: active ?? client.active,
   });
   return res.json(client);

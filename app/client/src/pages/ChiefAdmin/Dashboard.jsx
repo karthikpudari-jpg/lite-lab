@@ -5,6 +5,7 @@ import api from '../../api/client';
 export default function Dashboard() {
   const [data, setData] = useState({ summary: {}, clients: [] });
   const [statusFilter, setStatusFilter] = useState('');
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
   async function load() {
@@ -17,6 +18,10 @@ export default function Dashboard() {
   useEffect(() => { load(); }, [statusFilter]);
 
   const { summary, clients } = data;
+  const q = search.trim().toLowerCase();
+  const filteredClients = q
+    ? clients.filter((c) => c.clientCode?.toLowerCase().includes(q) || c.clientName?.toLowerCase().includes(q))
+    : clients;
 
   return (
     <div>
@@ -32,12 +37,20 @@ export default function Dashboard() {
       <div className="card">
         <div className="topbar">
           <h3 style={{ margin: 0 }}>Clients</h3>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ width: 180 }}>
-            <option value="">All statuses</option>
-            <option value="PAID">Paid</option>
-            <option value="PENDING">Pending</option>
-            <option value="EXPIRED">Expired</option>
-          </select>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by client code or name…"
+              style={{ width: 240 }}
+            />
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ width: 180 }}>
+              <option value="">All statuses</option>
+              <option value="PAID">Paid</option>
+              <option value="PENDING">Pending</option>
+              <option value="EXPIRED">Expired</option>
+            </select>
+          </div>
         </div>
         {loading ? <p>Loading…</p> : (
           <table>
@@ -48,7 +61,7 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {clients.map((c) => (
+              {filteredClients.map((c) => (
                 <tr key={c.id}>
                   <td>{c.clientCode}</td>
                   <td>{c.clientName}</td>
@@ -61,7 +74,7 @@ export default function Dashboard() {
                   <td><Link to={`/chief-admin/clients/${c.id}`}>Edit</Link></td>
                 </tr>
               ))}
-              {clients.length === 0 && <tr><td colSpan={9}>No clients found.</td></tr>}
+              {filteredClients.length === 0 && <tr><td colSpan={9}>No clients found.</td></tr>}
             </tbody>
           </table>
         )}

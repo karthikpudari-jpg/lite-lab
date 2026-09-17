@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import api from '../../api/client';
 import RoleCheckboxes from '../../components/RoleCheckboxes';
 import SearchSelect from '../../components/SearchSelect';
+import { calculatePlanAmount } from '../../utils/pricing';
 
 export default function ClientDetail() {
   const { id } = useParams();
@@ -34,6 +35,7 @@ export default function ClientDetail() {
       email: clientRes.data.email || '',
       address: clientRes.data.address || '',
       salesPerson: clientRes.data.salesPerson || '',
+      marketingPersonPrice: String(clientRes.data.marketingPersonPrice ?? 0),
       monthlyAmount: clientRes.data.monthlyAmount,
       active: clientRes.data.active,
     });
@@ -128,7 +130,15 @@ export default function ClientDetail() {
               placeholder="Search marketing person…"
             />
           </div>
-          <label><span>Monthly Amount</span><input value={`₹${form.monthlyAmount} (${users.length} user${users.length === 1 ? '' : 's'})`} disabled /></label>
+          <label><span>Marketing Person Price (₹/month)</span>
+            <input type="number" min={0} value={form.marketingPersonPrice} onChange={(e) => setForm((f) => ({ ...f, marketingPersonPrice: e.target.value }))} />
+          </label>
+          <label><span>Monthly Amount</span>
+            <input
+              value={`₹${calculatePlanAmount(users.length) + (Number(form.marketingPersonPrice) || 0)} (${users.length} user${users.length === 1 ? '' : 's'} + ₹${Number(form.marketingPersonPrice) || 0} marketing)`}
+              disabled
+            />
+          </label>
           <label><span>Active</span>
             <select value={form.active ? 'yes' : 'no'} onChange={(e) => setForm((f) => ({ ...f, active: e.target.value === 'yes' }))}>
               <option value="yes">Active</option>

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getNavLinks } from '../components/Layout';
 import { Icon } from '../components/Icons';
+import { formatDateDMY } from '../utils/format';
 import api from '../api/client';
 
 function greeting(hour) {
@@ -26,21 +27,28 @@ export default function AppHome() {
 
   useEffect(() => {
     api.get('/payments/status').then((r) => setSubInfo(r.data)).catch(() => {});
-    // Re-fetch whenever the client's payment status changes (e.g. right
-    // after paying) - the banner would otherwise keep showing stale info
-    // from before the payment, since this component stays mounted under
-    // the payment modal the whole time.
-  }, [auth?.client?.paymentStatus]);
+    // Re-fetch whenever the client's payment status changes, or on every
+    // successful payment even if it didn't change (e.g. paying further in
+    // advance while already PAID) - otherwise Paid Through/Expiry Days would
+    // keep showing stale info from before that payment, since this component
+    // stays mounted under the payment modal the whole time.
+  }, [auth?.client?.paymentStatus, auth?.lastPaymentAt]);
 
+  const { roleScreens } = useOutletContext() || {};
   const roles = auth?.user?.roles || [];
-  const links = getNavLinks(roles);
+  const links = getNavLinks(roles, roleScreens);
   const dateStr = now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const timeStr = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
   let expiryBanner = null;
+  let daysLeft = null;
   if (subInfo) {
-    const toDate = new Date(subInfo.toDate);
-    const daysLeft = Math.ceil((toDate - now) / (1000 * 60 * 60 * 24));
+    // While PAID, count down to the true furthest-paid date (paidThrough),
+    // not just the calendar-month cycle covering today - an advance payment
+    // chains extra PAID cycles on afterward, so the current cycle's own end
+    // date understates how long access is actually good for.
+    const toDate = new Date(subInfo.status === 'PAID' ? (subInfo.paidThrough || subInfo.toDate) : subInfo.toDate);
+    daysLeft = Math.ceil((toDate - now) / (1000 * 60 * 60 * 24));
     const formattedDate = toDate.toLocaleDateString();
 
     if (subInfo.status !== 'PAID') {
@@ -67,21 +75,46 @@ export default function AppHome() {
         </div>
       )}
 
-      <div className="home-hero">
-        <div className="home-hero-bg" />
-        <div className="home-hero-content">
-          <p className="home-hero-eyebrow">
-            <Icon name="building" size={15} /> {auth?.client?.clientName}
-          </p>
-          <h1>{greeting(now.getHours())}, {auth?.user?.name || auth?.user?.username}</h1>
-          <p className="home-hero-sub">{roles.join(' + ')} · Signed in as {auth?.user?.username}</p>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'stretch' }}>
+        <div className="home-hero" style={{ flex: '1 1 420px', marginBottom: 0 }}>
+          <div className="home-hero-bg" />
+          <div className="home-hero-content">
+            <p className="home-hero-eyebrow">
+              <Icon name="building" size={15} /> {auth?.client?.clientName}
+            </p>
+            <h1>{greeting(now.getHours())}, {auth?.user?.name || auth?.user?.username}</h1>
+            <p className="home-hero-sub">{roles.join(' + ')} · Signed in as {auth?.user?.username}</p>
 
-          <div className="home-hero-meta">
-            <span><Icon name="calendar" size={16} /> {dateStr}</span>
-            <span><Icon name="clock" size={16} /> {timeStr}</span>
-            <span className={`badge ${auth?.client?.paymentStatus}`}>{auth?.client?.paymentStatus}</span>
+            <div className="home-hero-meta">
+              <span><Icon name="calendar" size={16} /> {dateStr}</span>
+              <span><Icon name="clock" size={16} /> {timeStr}</span>
+              <span className={`badge ${auth?.client?.paymentStatus}`}>{auth?.client?.paymentStatus}</span>
+              {subInfo?.toDate && (
+                <span>
+                  <Icon name="calendar" size={16} />{' '}
+                  {subInfo.status === 'PAID'
+                    ? `Paid Through: ${formatDateDMY(subInfo.paidThrough || subInfo.toDate)}`
+                    : `Payment Due: ${formatDateDMY(subInfo.toDate)}`}
+                </span>
+              )}
+            </div>
           </div>
         </div>
+
+        {daysLeft != null && (
+          <div className="stat-tile" style={{ flex: '0 1 180px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
+            <div
+              className="value"
+              style={{
+                fontSize: 40,
+                color: daysLeft < 0 ? '#dc2626' : (daysLeft <= EXPIRY_WARNING_DAYS ? '#d97706' : '#16a34a'),
+              }}
+            >
+              {daysLeft < 0 ? `-${Math.abs(daysLeft)}` : daysLeft}
+            </div>
+            <div className="label">Expiry Days</div>
+          </div>
+        )}
       </div>
 
       {links.length > 0 && (

@@ -1,4 +1,5 @@
 const { Op } = require('sequelize');
+const XLSX = require('xlsx');
 const { Bill, BillItem, TestMaster, Sample, Report, Patient } = require('../models');
 
 function dateKey(date, groupBy) {
@@ -7,19 +8,34 @@ function dateKey(date, groupBy) {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * A `to` date is inclusive of that whole calendar day, not just midnight.
+ * Silently ignores an unparseable value (e.g. a stray "undefined" string
+ * from a caller) instead of handing Postgres an invalid date and 500ing.
+ */
+function dateRangeWhere(from, to) {
+  const fromDate = from ? new Date(from) : null;
+  const toDate = to ? new Date(to) : null;
+  const validFrom = fromDate && !Number.isNaN(fromDate.getTime()) ? fromDate : null;
+  const validTo = toDate && !Number.isNaN(toDate.getTime()) ? toDate : null;
+  if (!validFrom && !validTo) return {};
+
+  const range = {};
+  if (validFrom) range[Op.gte] = validFrom;
+  if (validTo) {
+    const end = new Date(validTo);
+    end.setHours(23, 59, 59, 999);
+    range[Op.lte] = end;
+  }
+  return { createdAt: range };
+}
+
 // GET /api/reports/transactions?from=&to=&groupBy=day|month
 async function transactions(req, res) {
   const { clientId } = req.user;
   const { from, to, groupBy = 'day' } = req.query;
 
-  const where = { clientId };
-  if (from || to) {
-    where.createdAt = {};
-    if (from) where.createdAt[Op.gte] = new Date(from);
-    if (to) where.createdAt[Op.lte] = new Date(to);
-  }
-
-  const bills = await Bill.findAll({ where, order: [['createdAt', 'ASC']] });
+  const bills = await Bill.findAll({ where: { clientId, ...dateRangeWhere(from, to) }, order: [['createdAt', 'ASC']] });
   const grouped = {};
   for (const bill of bills) {
     const key = dateKey(bill.createdAt, groupBy);
@@ -31,10 +47,11 @@ async function transactions(req, res) {
   return res.json(Object.values(grouped));
 }
 
-// GET /api/reports/collection-summary
+// GET /api/reports/collection-summary?from=&to=
 async function collectionSummary(req, res) {
   const { clientId } = req.user;
-  const bills = await Bill.findAll({ where: { clientId } });
+  const { from, to } = req.query;
+  const bills = await Bill.findAll({ where: { clientId, ...dateRangeWhere(from, to) } });
   const totalBilled = bills.reduce((s, b) => s + Number(b.totalAmount), 0);
   const totalCollected = bills.reduce((s, b) => s + Number(b.paidAmount), 0);
 
@@ -46,11 +63,12 @@ async function collectionSummary(req, res) {
   });
 }
 
-// GET /api/reports/outstanding
+// GET /api/reports/outstanding?from=&to=
 async function outstanding(req, res) {
   const { clientId } = req.user;
+  const { from, to } = req.query;
   const bills = await Bill.findAll({
-    where: { clientId },
+    where: { clientId, ...dateRangeWhere(from, to) },
     include: [Patient],
     order: [['createdAt', 'DESC']],
   });
@@ -67,10 +85,11 @@ async function outstanding(req, res) {
   return res.json(unpaid);
 }
 
-// GET /api/reports/lab-summary  (samples by status)
+// GET /api/reports/lab-summary?from=&to=  (samples by status)
 async function labSummary(req, res) {
   const { clientId } = req.user;
-  const samples = await Sample.findAll({ where: { clientId } });
+  const { from, to } = req.query;
+  const samples = await Sample.findAll({ where: { clientId, ...dateRangeWhere(from, to) } });
   const summary = samples.reduce((acc, s) => {
     acc[s.status] = (acc[s.status] || 0) + 1;
     return acc;
@@ -78,11 +97,12 @@ async function labSummary(req, res) {
   return res.json({ total: samples.length, byStatus: summary });
 }
 
-// GET /api/reports/lab-details
+// GET /api/reports/lab-details?from=&to=
 async function labDetails(req, res) {
   const { clientId } = req.user;
+  const { from, to } = req.query;
   const samples = await Sample.findAll({
-    where: { clientId },
+    where: { clientId, ...dateRangeWhere(from, to) },
     include: [
       { model: BillItem, include: [TestMaster] },
       Report,
@@ -101,13 +121,14 @@ async function labDetails(req, res) {
   })));
 }
 
-// GET /api/reports/test-wise-revenue
+// GET /api/reports/test-wise-revenue?from=&to=
 async function testWiseRevenue(req, res) {
   const { clientId } = req.user;
+  const { from, to } = req.query;
   const items = await BillItem.findAll({
     include: [
       { model: TestMaster },
-      { model: Bill, where: { clientId }, attributes: [] },
+      { model: Bill, where: { clientId, ...dateRangeWhere(from, to) }, attributes: [] },
     ],
   });
 
@@ -124,10 +145,11 @@ async function testWiseRevenue(req, res) {
   return res.json(Object.values(grouped));
 }
 
-// GET /api/reports/report-status
+// GET /api/reports/report-status?from=&to=
 async function reportStatusCounts(req, res) {
   const { clientId } = req.user;
-  const samples = await Sample.findAll({ where: { clientId }, include: [Report] });
+  const { from, to } = req.query;
+  const samples = await Sample.findAll({ where: { clientId, ...dateRangeWhere(from, to) }, include: [Report] });
   const counts = { PENDING: 0, VERIFIED: 0, RELEASED: 0 };
   for (const s of samples) {
     if (s.Report) counts[s.Report.status] = (counts[s.Report.status] || 0) + 1;
@@ -135,6 +157,76 @@ async function reportStatusCounts(req, res) {
   return res.json(counts);
 }
 
+// GET /api/reports/export?from=&to=&groupBy=day|month  - everything on the
+// Reports screen, as one workbook with a sheet per section.
+async function exportReport(req, res) {
+  const { clientId } = req.user;
+  const { from, to, groupBy = 'day' } = req.query;
+  const range = dateRangeWhere(from, to);
+
+  const [bills, testItems, samplesWithReport] = await Promise.all([
+    Bill.findAll({ where: { clientId, ...range }, include: [Patient], order: [['createdAt', 'ASC']] }),
+    BillItem.findAll({ include: [TestMaster, { model: Bill, where: { clientId, ...range }, attributes: [] }] }),
+    Sample.findAll({ where: { clientId, ...range }, include: [Report] }),
+  ]);
+
+  const grouped = {};
+  for (const bill of bills) {
+    const key = dateKey(bill.createdAt, groupBy);
+    if (!grouped[key]) grouped[key] = { period: key, billCount: 0, totalAmount: 0 };
+    grouped[key].billCount += 1;
+    grouped[key].totalAmount += Number(bill.totalAmount);
+  }
+  const transactionRows = Object.values(grouped).map((t) => ({ Period: t.period, 'Bill Count': t.billCount, 'Total Amount': t.totalAmount }));
+
+  const summaryRows = [{
+    'From Date': from || 'All time',
+    'To Date': to || 'All time',
+    Bills: bills.length,
+    'Total Billed': bills.reduce((s, b) => s + Number(b.totalAmount), 0),
+    'Total Collected': bills.reduce((s, b) => s + Number(b.paidAmount), 0),
+    Outstanding: bills.reduce((s, b) => s + Number(b.totalAmount) - Number(b.paidAmount), 0),
+  }];
+
+  const outstandingRows = bills
+    .filter((b) => Number(b.paidAmount) < Number(b.totalAmount))
+    .map((b) => ({
+      'Bill No': b.billNo,
+      Patient: b.Patient?.name || '',
+      'Total Amount': b.totalAmount,
+      'Paid Amount': b.paidAmount,
+      Outstanding: Number(b.totalAmount) - Number(b.paidAmount),
+    }));
+
+  const revenueByTest = {};
+  for (const item of testItems) {
+    const code = item.TestMaster.testCode;
+    if (!revenueByTest[code]) revenueByTest[code] = { testCode: code, testName: item.TestMaster.testName, count: 0, revenue: 0 };
+    revenueByTest[code].count += 1;
+    revenueByTest[code].revenue += Number(item.price);
+  }
+  const testRevenueRows = Object.values(revenueByTest).map((t) => ({
+    'Test Code': t.testCode, 'Test Name': t.testName, Count: t.count, Revenue: t.revenue,
+  }));
+
+  const reportStatusRows = [{ PENDING: 0, VERIFIED: 0, RELEASED: 0 }];
+  for (const s of samplesWithReport) {
+    if (s.Report) reportStatusRows[0][s.Report.status] = (reportStatusRows[0][s.Report.status] || 0) + 1;
+  }
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryRows), 'Summary');
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(transactionRows), 'Transactions');
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(testRevenueRows), 'Test-wise Revenue');
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(outstandingRows), 'Outstanding');
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(reportStatusRows), 'Report Status');
+  const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="reports-export.xlsx"');
+  return res.send(buffer);
+}
+
 module.exports = {
-  transactions, collectionSummary, outstanding, labSummary, labDetails, testWiseRevenue, reportStatusCounts,
+  transactions, collectionSummary, outstanding, labSummary, labDetails, testWiseRevenue, reportStatusCounts, exportReport,
 };

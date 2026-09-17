@@ -17,6 +17,7 @@ async function buildSalesReportData() {
       name: u.name || u.username,
       clientCount: 0,
       totalMonthlyRevenue: 0,
+      totalMarketingPersonPrice: 0,
       paid: 0,
       pending: 0,
       expired: 0,
@@ -34,6 +35,7 @@ async function buildSalesReportData() {
         name: c.salesPerson,
         clientCount: 0,
         totalMonthlyRevenue: 0,
+        totalMarketingPersonPrice: 0,
         paid: 0,
         pending: 0,
         expired: 0,
@@ -42,6 +44,7 @@ async function buildSalesReportData() {
     const s = summaryMap.get(c.salesPerson);
     s.clientCount += 1;
     s.totalMonthlyRevenue += Number(c.monthlyAmount);
+    s.totalMarketingPersonPrice += Number(c.marketingPersonPrice || 0);
     if (c.paymentStatus === 'PAID') s.paid += 1;
     else if (c.paymentStatus === 'PENDING') s.pending += 1;
     else if (c.paymentStatus === 'EXPIRED') s.expired += 1;
@@ -50,6 +53,7 @@ async function buildSalesReportData() {
       salesPerson: c.salesPerson,
       clientCode: c.clientCode,
       clientName: c.clientName,
+      marketingPersonPrice: Number(c.marketingPersonPrice || 0),
       monthlyAmount: Number(c.monthlyAmount),
       paymentStatus: c.paymentStatus,
       active: c.active,
@@ -75,6 +79,7 @@ async function exportSalesReport(req, res) {
     Username: s.salesPerson,
     'Clients Onboarded': s.clientCount,
     'Total Monthly Revenue': s.totalMonthlyRevenue,
+    'Total Marketing Person Price': s.totalMarketingPersonPrice,
     Paid: s.paid,
     Pending: s.pending,
     Expired: s.expired,
@@ -83,6 +88,7 @@ async function exportSalesReport(req, res) {
     'Sales Person': d.salesPerson,
     'Client Code': d.clientCode,
     'Client Name': d.clientName,
+    'Marketing Person Price': d.marketingPersonPrice,
     'Monthly Amount': d.monthlyAmount,
     'Payment Status': d.paymentStatus,
     Active: d.active ? 'Yes' : 'No',

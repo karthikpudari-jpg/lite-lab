@@ -1,5 +1,13 @@
+const { Op } = require('sequelize');
 const XLSX = require('xlsx');
 const { TestMaster, ParameterMaster } = require('../models');
+
+// Chief Admin adds to the shared/universal catalog (clientId null, seen by
+// everyone) exactly as before; a client-side user's own parameter is scoped
+// to their client only and never shows up for anyone else.
+function requesterClientId(req) {
+  return req.user?.type === 'CLIENT_USER' ? req.user.clientId : null;
+}
 
 // POST /api/masters/tests
 async function createTest(req, res) {
@@ -14,9 +22,11 @@ async function createTest(req, res) {
   const test = await TestMaster.create({ testCode, testName });
 
   if (Array.isArray(parameters)) {
+    const clientId = requesterClientId(req);
     for (const p of parameters) {
       await ParameterMaster.create({
         testId: test.id,
+        clientId,
         parameterName: p.parameterName,
         unit: p.unit,
         normalRangeLow: p.normalRangeLow,
@@ -29,8 +39,17 @@ async function createTest(req, res) {
 }
 
 // GET /api/masters/tests
+// A client sees every universal parameter plus whatever parameters they've
+// added for themselves; Chief Admin (no client context) sees only the
+// universal catalog - matching what it managed before this feature existed.
 async function listTests(req, res) {
-  const tests = await TestMaster.findAll({ include: [ParameterMaster], order: [['testCode', 'ASC']] });
+  const clientId = requesterClientId(req);
+  const paramWhere = clientId ? { [Op.or]: [{ clientId: null }, { clientId }] } : { clientId: null };
+
+  const tests = await TestMaster.findAll({
+    include: [{ model: ParameterMaster, where: paramWhere, required: false }],
+    order: [['testCode', 'ASC']],
+  });
   return res.json(tests);
 }
 
@@ -49,8 +68,10 @@ async function addParameter(req, res) {
   if (!test) return res.status(404).json({ message: 'Test not found' });
 
   const { parameterName, unit, normalRangeLow, normalRangeHigh } = req.body;
+  if (!parameterName) return res.status(400).json({ message: 'parameterName is required' });
+
   const parameter = await ParameterMaster.create({
-    testId: test.id, parameterName, unit, normalRangeLow, normalRangeHigh,
+    testId: test.id, clientId: requesterClientId(req), parameterName, unit, normalRangeLow, normalRangeHigh,
   });
   return res.status(201).json(parameter);
 }
@@ -59,7 +80,12 @@ async function addParameter(req, res) {
 // per parameter (or one blank-parameter row for a test that has none yet), so
 // re-downloading it after edits doubles as an up-to-date export.
 async function downloadTemplate(req, res) {
-  const tests = await TestMaster.findAll({ include: [ParameterMaster], order: [['testCode', 'ASC']] });
+  // Chief-Admin-only endpoint - the export covers just the universal catalog,
+  // never a client's own private parameters.
+  const tests = await TestMaster.findAll({
+    include: [{ model: ParameterMaster, where: { clientId: null }, required: false }],
+    order: [['testCode', 'ASC']],
+  });
 
   const rows = [];
   for (const t of tests) {
@@ -102,7 +128,9 @@ async function previewUpload(req, res) {
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
-  const existingTests = await TestMaster.findAll({ include: [ParameterMaster] });
+  const existingTests = await TestMaster.findAll({
+    include: [{ model: ParameterMaster, where: { clientId: null }, required: false }],
+  });
   const testByCode = new Map(existingTests.map((t) => [t.testCode, t]));
 
   const preview = rows.map((r, idx) => {
@@ -164,7 +192,7 @@ async function commitUpload(req, res) {
     const parameterName = String(row.parameterName || '').trim();
     if (parameterName) {
       const [, paramCreated] = await ParameterMaster.findOrCreate({
-        where: { testId: test.id, parameterName },
+        where: { testId: test.id, parameterName, clientId: null },
         defaults: { unit: row.unit, normalRangeLow: row.normalRangeLow, normalRangeHigh: row.normalRangeHigh },
       });
       if (paramCreated) results.parametersAdded += 1;
