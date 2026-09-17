@@ -75,9 +75,9 @@ export default function AppHome() {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'stretch' }}>
-        <div className="home-hero" style={{ flex: '1 1 420px', marginBottom: 0 }}>
-          <div className="home-hero-bg" />
+      <div className="home-hero" style={{ marginBottom: 0 }}>
+        <div className="home-hero-bg" />
+        <div className="home-hero-inner">
           <div className="home-hero-content">
             <p className="home-hero-eyebrow">
               <Icon name="building" size={15} /> {auth?.client?.clientName}
@@ -99,22 +99,19 @@ export default function AppHome() {
               )}
             </div>
           </div>
-        </div>
 
-        {daysLeft != null && (
-          <div className="stat-tile" style={{ flex: '0 1 180px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
-            <div
-              className="value"
-              style={{
-                fontSize: 40,
-                color: daysLeft < 0 ? '#dc2626' : (daysLeft <= EXPIRY_WARNING_DAYS ? '#d97706' : '#16a34a'),
-              }}
-            >
-              {daysLeft < 0 ? `-${Math.abs(daysLeft)}` : daysLeft}
+          {daysLeft != null && (
+            <div className="home-hero-expiry">
+              <div
+                className="home-hero-expiry-value"
+                style={{ color: daysLeft < 0 ? '#f87171' : (daysLeft <= EXPIRY_WARNING_DAYS ? '#fbbf24' : '#4ade80') }}
+              >
+                {daysLeft < 0 ? `-${Math.abs(daysLeft)}` : daysLeft}
+              </div>
+              <div className="home-hero-expiry-label">Expiry Days</div>
             </div>
-            <div className="label">Expiry Days</div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {links.length > 0 && (

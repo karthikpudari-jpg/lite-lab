@@ -100,7 +100,6 @@ export function AppLayout() {
           {links.map((item) => (
             <NavLink key={item.to} to={item.to}>{item.label}</NavLink>
           ))}
-          {roles.includes('ADMIN') && <NavLink to="/app/role-screens">Staff Screen Access</NavLink>}
           <NavLink to="/app/reset-password">Reset Password</NavLink>
         </nav>
       </aside>
