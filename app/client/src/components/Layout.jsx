@@ -23,6 +23,11 @@ export const SCREEN_CATALOG = [
 
 const NAV_GROUP_ORDER = ['Front Office', 'Laboratory', 'Manager', 'Admin', 'General'];
 
+/** "Front Office" -> "front-office", so each group can carry its own accent color in CSS. */
+function groupSlug(label) {
+  return label.toLowerCase().replace(/\s+/g, '-');
+}
+
 /** Buckets a filtered link list into the labelled sections the sidebar renders, in a fixed order, dropping empty sections. */
 function groupNavLinks(links) {
   const byGroup = new Map();
@@ -116,7 +121,7 @@ export function ChiefAdminLayout() {
         <nav onClick={() => setNavOpen(false)}>
           <NavLink to="/chief-admin" end><Icon name="dashboard" size={17} /><span>Dashboard</span></NavLink>
           {isAdmin && (
-            <>
+            <div className="nav-group nav-group-administration">
               <div className="nav-group-label">Administration</div>
               <NavLink to="/chief-admin/clients/new"><Icon name="building" size={17} /><span>Create Client</span></NavLink>
               <NavLink to="/chief-admin/masters"><Icon name="masters" size={17} /><span>Test Master</span></NavLink>
@@ -125,14 +130,18 @@ export function ChiefAdminLayout() {
               <NavLink to="/chief-admin/integrations"><Icon name="plug" size={17} /><span>Integrations</span></NavLink>
               <NavLink to="/chief-admin/sales-dashboard"><Icon name="reports" size={17} /><span>Sales Dashboard</span></NavLink>
               <NavLink to="/chief-admin/role-screen-defaults"><Icon name="branding" size={17} /><span>Role Screen Defaults</span></NavLink>
-            </>
+            </div>
           )}
           {!isAdmin && isMarketing && <div className="nav-group-label">Administration</div>}
           {(isAdmin || isMarketing) && (
-            <NavLink to="/chief-admin/team-passwords"><Icon name="lock" size={17} /><span>Reset Passwords</span></NavLink>
+            <div className="nav-group nav-group-administration">
+              <NavLink to="/chief-admin/team-passwords"><Icon name="lock" size={17} /><span>Reset Passwords</span></NavLink>
+            </div>
           )}
           <div className="nav-group-label">Account</div>
-          <NavLink to="/chief-admin/reset-password"><Icon name="lock" size={17} /><span>My Password</span></NavLink>
+          <div className="nav-group nav-group-account">
+            <NavLink to="/chief-admin/reset-password"><Icon name="lock" size={17} /><span>My Password</span></NavLink>
+          </div>
         </nav>
       </aside>
       <main className="main-content">
@@ -174,7 +183,7 @@ export function AppLayout() {
         <nav onClick={() => setNavOpen(false)}>
           <NavLink to="/app" end><Icon name="home" size={17} /><span>Home</span></NavLink>
           {groupNavLinks(links).map((g) => (
-            <div className="nav-group" key={g.label}>
+            <div className={`nav-group nav-group-${groupSlug(g.label)}`} key={g.label}>
               <div className="nav-group-label">{g.label}</div>
               {g.items.map((item) => (
                 <NavLink key={item.to} to={item.to}><Icon name={item.icon} size={17} /><span>{item.label}</span></NavLink>
@@ -182,7 +191,9 @@ export function AppLayout() {
             </div>
           ))}
           <div className="nav-group-label">Account</div>
-          <NavLink to="/app/reset-password"><Icon name="lock" size={17} /><span>Reset Password</span></NavLink>
+          <div className="nav-group nav-group-account">
+            <NavLink to="/app/reset-password"><Icon name="lock" size={17} /><span>Reset Password</span></NavLink>
+          </div>
         </nav>
       </aside>
       <main className="main-content">

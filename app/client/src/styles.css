@@ -50,6 +50,31 @@ body {
 .sidebar nav a.active, .sidebar nav a:hover { background: var(--brand-teal-tint); color: var(--brand-teal); }
 .sidebar nav a.active svg, .sidebar nav a:hover svg { color: var(--brand-teal); }
 
+/* Each sidebar section gets its own accent color, so the modules read apart
+   from each other at a glance instead of every icon being the same gray. */
+.sidebar nav .nav-group-front-office a svg { color: #60a5fa; }
+.sidebar nav .nav-group-front-office a.active, .sidebar nav .nav-group-front-office a:hover { background: #eff6ff; color: #2563eb; }
+.sidebar nav .nav-group-front-office a.active svg, .sidebar nav .nav-group-front-office a:hover svg { color: #2563eb; }
+
+.sidebar nav .nav-group-laboratory a svg { color: #a78bfa; }
+.sidebar nav .nav-group-laboratory a.active, .sidebar nav .nav-group-laboratory a:hover { background: #f5f3ff; color: #7c3aed; }
+.sidebar nav .nav-group-laboratory a.active svg, .sidebar nav .nav-group-laboratory a:hover svg { color: #7c3aed; }
+
+.sidebar nav .nav-group-manager a svg { color: #fbbf24; }
+.sidebar nav .nav-group-manager a.active, .sidebar nav .nav-group-manager a:hover { background: #fffbeb; color: #b45309; }
+.sidebar nav .nav-group-manager a.active svg, .sidebar nav .nav-group-manager a:hover svg { color: #b45309; }
+
+.sidebar nav .nav-group-admin a svg { color: #fb7185; }
+.sidebar nav .nav-group-admin a.active, .sidebar nav .nav-group-admin a:hover { background: #fff1f2; color: #e11d48; }
+.sidebar nav .nav-group-admin a.active svg, .sidebar nav .nav-group-admin a:hover svg { color: #e11d48; }
+
+.sidebar nav .nav-group-general a svg { color: #2dd4bf; }
+.sidebar nav .nav-group-administration a svg { color: #818cf8; }
+.sidebar nav .nav-group-administration a.active, .sidebar nav .nav-group-administration a:hover { background: #eef2ff; color: #4f46e5; }
+.sidebar nav .nav-group-administration a.active svg, .sidebar nav .nav-group-administration a:hover svg { color: #4f46e5; }
+
+.sidebar nav .nav-group-account a svg { color: #94a3b8; }
+
 .hamburger-btn {
   display: none; background: transparent; color: #1a1a1a; border: 1px solid #d1d5db;
   padding: 7px; border-radius: 6px; flex-shrink: 0;
