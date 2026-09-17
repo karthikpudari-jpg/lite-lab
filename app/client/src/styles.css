@@ -13,11 +13,10 @@ body {
 .app-shell { display: flex; min-height: 100vh; }
 .sidebar {
   width: 240px;
-  background: #fff;
-  color: #334155;
+  background: linear-gradient(160deg, #0b1530 0%, #14213d 55%, #1b2a52 100%);
+  color: #cbd5e1;
   padding: 18px 14px;
   flex-shrink: 0;
-  border-right: 1px solid #eef0f4;
 }
 .sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 0 6px; margin-bottom: 22px; }
 .sidebar-brand .mark-icon {
@@ -26,11 +25,11 @@ body {
   color: #fff; display: flex; align-items: center; justify-content: center;
   box-shadow: 0 6px 14px rgba(15, 118, 110, 0.35);
 }
-.sidebar-brand-text { font-size: 15px; font-weight: 700; color: #0f172a; line-height: 1.25; overflow-wrap: anywhere; }
-.sidebar-brand-text span { display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #94a3b8; }
+.sidebar-brand-text { font-size: 15px; font-weight: 700; color: #fff; line-height: 1.25; overflow-wrap: anywhere; }
+.sidebar-brand-text span { display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #8ea0c7; }
 .nav-group-label {
   font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
-  color: #94a3b8; margin: 16px 10px 6px;
+  color: #7285ab; margin: 16px 10px 6px;
 }
 .sidebar nav > .nav-group:first-child .nav-group-label,
 .sidebar nav > .nav-group-label:first-child { margin-top: 4px; }
@@ -38,7 +37,7 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #475569;
+  color: #cbd5e1;
   text-decoration: none;
   padding: 9px 10px;
   border-radius: 8px;
@@ -46,34 +45,34 @@ body {
   font-size: 14px;
   font-weight: 500;
 }
-.sidebar nav a svg { flex-shrink: 0; color: #94a3b8; }
-.sidebar nav a.active, .sidebar nav a:hover { background: var(--brand-teal-tint); color: var(--brand-teal); }
-.sidebar nav a.active svg, .sidebar nav a:hover svg { color: var(--brand-teal); }
+.sidebar nav a svg { flex-shrink: 0; color: #7c8db0; }
+.sidebar nav a.active, .sidebar nav a:hover { background: rgba(45, 212, 191, 0.14); color: #5eead4; }
+.sidebar nav a.active svg, .sidebar nav a:hover svg { color: #5eead4; }
 
 /* Each sidebar section gets its own accent color, so the modules read apart
    from each other at a glance instead of every icon being the same gray. */
 .sidebar nav .nav-group-front-office a svg { color: #60a5fa; }
-.sidebar nav .nav-group-front-office a.active, .sidebar nav .nav-group-front-office a:hover { background: #eff6ff; color: #2563eb; }
-.sidebar nav .nav-group-front-office a.active svg, .sidebar nav .nav-group-front-office a:hover svg { color: #2563eb; }
+.sidebar nav .nav-group-front-office a.active, .sidebar nav .nav-group-front-office a:hover { background: rgba(96, 165, 250, 0.16); color: #93c5fd; }
+.sidebar nav .nav-group-front-office a.active svg, .sidebar nav .nav-group-front-office a:hover svg { color: #93c5fd; }
 
 .sidebar nav .nav-group-laboratory a svg { color: #a78bfa; }
-.sidebar nav .nav-group-laboratory a.active, .sidebar nav .nav-group-laboratory a:hover { background: #f5f3ff; color: #7c3aed; }
-.sidebar nav .nav-group-laboratory a.active svg, .sidebar nav .nav-group-laboratory a:hover svg { color: #7c3aed; }
+.sidebar nav .nav-group-laboratory a.active, .sidebar nav .nav-group-laboratory a:hover { background: rgba(167, 139, 250, 0.16); color: #c4b5fd; }
+.sidebar nav .nav-group-laboratory a.active svg, .sidebar nav .nav-group-laboratory a:hover svg { color: #c4b5fd; }
 
 .sidebar nav .nav-group-manager a svg { color: #fbbf24; }
-.sidebar nav .nav-group-manager a.active, .sidebar nav .nav-group-manager a:hover { background: #fffbeb; color: #b45309; }
-.sidebar nav .nav-group-manager a.active svg, .sidebar nav .nav-group-manager a:hover svg { color: #b45309; }
+.sidebar nav .nav-group-manager a.active, .sidebar nav .nav-group-manager a:hover { background: rgba(251, 191, 36, 0.16); color: #fcd34d; }
+.sidebar nav .nav-group-manager a.active svg, .sidebar nav .nav-group-manager a:hover svg { color: #fcd34d; }
 
 .sidebar nav .nav-group-admin a svg { color: #fb7185; }
-.sidebar nav .nav-group-admin a.active, .sidebar nav .nav-group-admin a:hover { background: #fff1f2; color: #e11d48; }
-.sidebar nav .nav-group-admin a.active svg, .sidebar nav .nav-group-admin a:hover svg { color: #e11d48; }
+.sidebar nav .nav-group-admin a.active, .sidebar nav .nav-group-admin a:hover { background: rgba(251, 113, 133, 0.16); color: #fda4af; }
+.sidebar nav .nav-group-admin a.active svg, .sidebar nav .nav-group-admin a:hover svg { color: #fda4af; }
 
 .sidebar nav .nav-group-general a svg { color: #2dd4bf; }
 .sidebar nav .nav-group-administration a svg { color: #818cf8; }
-.sidebar nav .nav-group-administration a.active, .sidebar nav .nav-group-administration a:hover { background: #eef2ff; color: #4f46e5; }
-.sidebar nav .nav-group-administration a.active svg, .sidebar nav .nav-group-administration a:hover svg { color: #4f46e5; }
+.sidebar nav .nav-group-administration a.active, .sidebar nav .nav-group-administration a:hover { background: rgba(129, 140, 248, 0.16); color: #a5b4fc; }
+.sidebar nav .nav-group-administration a.active svg, .sidebar nav .nav-group-administration a:hover svg { color: #a5b4fc; }
 
-.sidebar nav .nav-group-account a svg { color: #94a3b8; }
+.sidebar nav .nav-group-account a svg { color: #7c8db0; }
 
 .hamburger-btn {
   display: none; background: transparent; color: #1a1a1a; border: 1px solid #d1d5db;
@@ -130,6 +129,31 @@ th { background: #f9fafb; }
 .badge.PENDING, .badge.OPEN, .badge.CREATED, .badge.PENDING_COLLECTION { background: #fef9c3; color: #854d0e; }
 .badge.EXPIRED, .badge.FAILED, .badge.CANCELLED { background: #fee2e2; color: #991b1b; }
 .badge.COLLECTED, .badge.RESULT_ENTERED, .badge.ASSIGNED { background: #dbeafe; color: #1e40af; }
+
+/* Status counts strip (Total/Pending/Done/Cancelled) shown atop a work-queue
+   list, e.g. Laboratory and Orders, so overall progress is visible at a glance. */
+.status-summary { display: flex; gap: 10px; flex-wrap: wrap; }
+.stat-chip {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-width: 64px; padding: 6px 14px; border-radius: 10px; border: 1px solid #e2e8f0; background: #f8fafc;
+}
+.stat-chip .stat-value { font-size: 18px; font-weight: 700; line-height: 1.15; color: #0f172a; }
+.stat-chip .stat-label { font-size: 10.5px; color: #64748b; text-transform: uppercase; letter-spacing: .04em; }
+.stat-chip.pending { background: #fef9c3; border-color: #fde68a; }
+.stat-chip.pending .stat-value { color: #854d0e; }
+.stat-chip.done { background: #dcfce7; border-color: #bbf7d0; }
+.stat-chip.done .stat-value { color: #166534; }
+.stat-chip.cancelled { background: #fee2e2; border-color: #fecaca; }
+.stat-chip.cancelled .stat-value { color: #991b1b; }
+
+/* Pill-style status tabs, an alternative to a plain <select> for filtering a work queue. */
+.status-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.status-tab {
+  background: transparent; color: #64748b; border: 1px solid transparent; padding: 6px 12px;
+  border-radius: 8px; font-size: 12.5px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase;
+}
+.status-tab:hover { background: #f1f5f9; }
+.status-tab.active { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
 button {
   background: #2563eb; color: #fff; border: none; padding: 8px 14px;
   border-radius: 6px; cursor: pointer; font-size: 14px;
