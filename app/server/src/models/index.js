@@ -16,6 +16,10 @@ const ChiefAdmin = sequelize.define('ChiefAdmin', {
   passwordHash: { type: DataTypes.STRING, allowNull: false },
   name: { type: DataTypes.STRING },
   active: { type: DataTypes.BOOLEAN, defaultValue: true },
+  // Identifies this account's one currently-valid login session - set at
+  // login and stamped into the JWT, so logging in again elsewhere evicts
+  // whatever session was active before (see auth.middleware.js).
+  currentSessionId: { type: DataTypes.STRING, allowNull: true },
   ...AUDIT_FIELDS,
 }, { tableName: 'chief_admin' });
 
@@ -172,6 +176,10 @@ const ClientUser = sequelize.define('ClientUser', {
   email: { type: DataTypes.STRING },
   mobile: { type: DataTypes.STRING },
   active: { type: DataTypes.BOOLEAN, defaultValue: true },
+  // Identifies this account's one currently-valid login session - set at
+  // login and stamped into the JWT, so logging in again elsewhere evicts
+  // whatever session was active before (see auth.middleware.js).
+  currentSessionId: { type: DataTypes.STRING, allowNull: true },
   ...AUDIT_FIELDS,
 }, {
   tableName: 'client_user',
@@ -195,6 +203,7 @@ const ParameterMaster = sequelize.define('ParameterMaster', {
   parameterCode: { type: DataTypes.STRING },
   parameterName: { type: DataTypes.STRING, allowNull: false },
   unit: { type: DataTypes.STRING },
+  method: { type: DataTypes.STRING }, // testing method, e.g. "Photometry", "ELISA"
   // The default range, used whenever no age/gender-specific rule below matches.
   normalRangeLow: { type: DataTypes.STRING },
   normalRangeHigh: { type: DataTypes.STRING },
@@ -210,6 +219,7 @@ const ParameterNormalRange = sequelize.define('ParameterNormalRange', {
   gender: { type: DataTypes.STRING, allowNull: false, defaultValue: 'Any' }, // Male | Female | Other | Any
   ageMin: { type: DataTypes.INTEGER }, // null = no lower bound
   ageMax: { type: DataTypes.INTEGER }, // null = no upper bound
+  ageUnit: { type: DataTypes.STRING, defaultValue: 'Years' }, // Years | Months | Days - the unit ageMin/ageMax are expressed in (e.g. a "0-7 days" newborn band)
   normalRangeLow: { type: DataTypes.STRING },
   normalRangeHigh: { type: DataTypes.STRING },
   ...AUDIT_FIELDS,
@@ -335,6 +345,7 @@ const Patient = sequelize.define('Patient', {
   umr: { type: DataTypes.STRING, allowNull: false },
   name: { type: DataTypes.STRING, allowNull: false },
   age: { type: DataTypes.INTEGER },
+  ageUnit: { type: DataTypes.STRING, defaultValue: 'Years' }, // Years | Months | Days - lets a newborn's age be entered in days
   gender: { type: DataTypes.STRING },
   mobile: { type: DataTypes.STRING },
   email: { type: DataTypes.STRING },

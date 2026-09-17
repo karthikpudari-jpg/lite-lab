@@ -23,6 +23,10 @@ export function AuthProvider({ children }) {
   }
 
   function logout() {
+    // Best-effort: clears currentSessionId server-side so the token can't be
+    // reused even before it expires. Ignore failures (e.g. already invalid) -
+    // the local session is cleared regardless.
+    if (auth?.token) api.post('/auth/logout').catch(() => {});
     persist(null);
     setPaymentRequired(false);
   }

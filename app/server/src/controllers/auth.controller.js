@@ -1,4 +1,5 @@
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { Op } = require('sequelize');
 const { ChiefAdmin, Client, ClientUser, Role } = require('../models');
 const { signToken } = require('../utils/jwt');
@@ -21,7 +22,11 @@ async function chiefAdminLogin(req, res) {
   }
 
   const roles = admin.Roles.map((r) => r.name);
-  const token = signToken({ type: 'CHIEF_ADMIN', id: admin.id, username: admin.username, roles });
+  // A fresh session id evicts any session already active elsewhere for this
+  // account - see the comparison in auth.middleware.js.
+  const sessionId = crypto.randomUUID();
+  await admin.update({ currentSessionId: sessionId });
+  const token = signToken({ type: 'CHIEF_ADMIN', id: admin.id, username: admin.username, roles, sessionId });
   return res.json({
     token,
     user: { id: admin.id, username: admin.username, name: admin.name, roles, type: 'CHIEF_ADMIN' },
@@ -51,12 +56,18 @@ async function clientUserLogin(req, res) {
 
   const roles = user.Roles.map((r) => r.name);
 
+  // A fresh session id evicts any session already active elsewhere for this
+  // account - see the comparison in auth.middleware.js.
+  const sessionId = crypto.randomUUID();
+  await user.update({ currentSessionId: sessionId });
+
   const token = signToken({
     type: 'CLIENT_USER',
     id: user.id,
     clientId: client.id,
     clientCode: client.clientCode,
     roles,
+    sessionId,
   });
 
   // Re-derive from the subscription's Start Date/End Date so a lapsed window
@@ -158,4 +169,13 @@ async function changeOwnPassword(req, res) {
   return res.json({ message: 'Password updated.' });
 }
 
-module.exports = { chiefAdminLogin, clientUserLogin, selfRegister, changeOwnPassword };
+// POST /api/auth/logout  (any authenticated account)
+// Clears the account's current session id so its token can no longer pass
+// the single-session check in auth.middleware.js, even before it expires.
+async function logout(req, res) {
+  const Model = req.user.type === 'CHIEF_ADMIN' ? ChiefAdmin : ClientUser;
+  await Model.update({ currentSessionId: null }, { where: { id: req.user.id } });
+  return res.json({ message: 'Logged out.' });
+}
+
+module.exports = { chiefAdminLogin, clientUserLogin, selfRegister, changeOwnPassword, logout };

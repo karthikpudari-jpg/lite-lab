@@ -26,6 +26,9 @@ async function authenticate(req, res, next) {
     if (!admin || !admin.active) {
       return res.status(401).json({ message: 'This account is no longer active' });
     }
+    if (admin.currentSessionId !== payload.sessionId) {
+      return res.status(401).json({ message: 'You have been logged out because this account signed in elsewhere' });
+    }
     req.user = { ...payload, roles: admin.Roles.map((r) => r.name) };
     return runWithActor(`${admin.username} (CHIEF_ADMIN)`, next);
   }
@@ -34,6 +37,9 @@ async function authenticate(req, res, next) {
     const user = await ClientUser.findByPk(payload.id, { include: [Role, Client] });
     if (!user || !user.active || !user.Client || !user.Client.active) {
       return res.status(401).json({ message: 'This account is no longer active' });
+    }
+    if (user.currentSessionId !== payload.sessionId) {
+      return res.status(401).json({ message: 'You have been logged out because this account signed in elsewhere' });
     }
     req.user = { ...payload, roles: user.Roles.map((r) => r.name) };
     return runWithActor(`${user.username} (${user.Client.clientCode})`, next);
