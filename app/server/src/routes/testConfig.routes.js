@@ -16,6 +16,8 @@ router.use(authenticate, requireActiveSubscription, requireRole(ROLES.MANAGER, R
 
 router.get('/tests', testCtrl.listTests);
 router.post('/tests/:testId/parameters', testCtrl.addParameter);
+router.post('/parameters/:parameterId/ranges', testCtrl.addNormalRange);
+router.delete('/parameters/:parameterId/ranges/:rangeId', testCtrl.deleteNormalRange);
 
 router.get('/test-shortname', shortNameCtrl.listShortNames);
 router.put('/test-shortname', shortNameCtrl.setShortName);

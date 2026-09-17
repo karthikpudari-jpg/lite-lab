@@ -18,6 +18,8 @@ router.get('/tests', testCtrl.listTests);
 router.post('/tests', testCtrl.createTest);
 router.put('/tests/:id', testCtrl.updateTest);
 router.post('/tests/:testId/parameters', testCtrl.addParameter);
+router.post('/parameters/:parameterId/ranges', testCtrl.addNormalRange);
+router.delete('/parameters/:parameterId/ranges/:rangeId', testCtrl.deleteNormalRange);
 
 // Client-wise test pricing for the logged-in client
 router.get('/client-test-price', priceCtrl.listPrices);

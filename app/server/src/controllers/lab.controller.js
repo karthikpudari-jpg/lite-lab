@@ -1,8 +1,10 @@
 const { Op } = require('sequelize');
 const {
-  Sample, BillItem, TestMaster, ParameterMaster, Result, Report, Bill, Patient, Client, ReferralDoctor, Payor,
+  Sample, BillItem, TestMaster, ParameterMaster, ParameterNormalRange, Result, Report, Bill, Patient, Client,
+  ReferralDoctor, Payor,
 } = require('../models');
 const { buildParameterInsight } = require('../utils/trendInsights');
+const { resolveNormalRange } = require('../utils/normalRange');
 
 // A client doing result entry sees every universal parameter plus whatever
 // parameters it added for itself for that test - never another client's own.
@@ -21,6 +23,51 @@ function buildSampleIncludes(clientId) {
   ];
 }
 
+// Deliberately NOT eager-loaded via a nested Sequelize `include` anywhere in
+// this file - at 3+ levels of nesting (e.g. Sample->BillItem->TestMaster->
+// ParameterMaster->ParameterNormalRange), Postgres's 63-byte identifier limit
+// truncates the long generated join aliases, and Sequelize then maps the
+// truncated columns back onto the wrong/colliding attribute names, silently
+// corrupting the nested rows. Fetching ranges with their own flat query and
+// attaching them in JS sidesteps that entirely.
+async function attachNormalRanges(parameterMasters) {
+  const ids = [...new Set(parameterMasters.map((p) => p.id))];
+  if (ids.length === 0) return;
+  const ranges = await ParameterNormalRange.findAll({ where: { parameterId: ids } });
+  const byParamId = new Map();
+  for (const r of ranges) {
+    const list = byParamId.get(r.parameterId) || [];
+    list.push(r.toJSON ? r.toJSON() : r);
+    byParamId.set(r.parameterId, list);
+  }
+  for (const p of parameterMasters) {
+    p.ParameterNormalRanges = byParamId.get(p.id) || [];
+  }
+}
+
+/**
+ * Overrides every parameter's flat normalRangeLow/High in a sample's JSON
+ * with the range resolved for this sample's own patient (age/gender), so
+ * callers (result entry UI, isOutOfRange) never need their own age/gender
+ * matching logic - they just read normalRangeLow/High as before.
+ */
+async function withResolvedRanges(sampleJson) {
+  const patient = sampleJson.BillItem?.Bill?.Patient;
+  const age = patient?.age;
+  const gender = patient?.gender;
+
+  const params = sampleJson.BillItem?.TestMaster?.ParameterMasters;
+  if (Array.isArray(params) && params.length > 0) {
+    await attachNormalRanges(params);
+    for (const p of params) {
+      const resolved = resolveNormalRange(p, age, gender);
+      p.normalRangeLow = resolved.normalRangeLow;
+      p.normalRangeHigh = resolved.normalRangeHigh;
+    }
+  }
+  return sampleJson;
+}
+
 // GET /api/lab/samples?status=PENDING_COLLECTION
 async function listSamples(req, res) {
   const { clientId } = req.user;
@@ -29,7 +76,8 @@ async function listSamples(req, res) {
   if (status) where.status = status;
 
   const samples = await Sample.findAll({ where, include: buildSampleIncludes(clientId), order: [['createdAt', 'DESC']] });
-  return res.json(samples);
+  const withRanges = await Promise.all(samples.map((s) => withResolvedRanges(s.toJSON())));
+  return res.json(withRanges);
 }
 
 // GET /api/lab/samples/:id
@@ -37,7 +85,7 @@ async function getSample(req, res) {
   const { clientId } = req.user;
   const sample = await Sample.findOne({ where: { id: req.params.id, clientId }, include: buildSampleIncludes(clientId) });
   if (!sample) return res.status(404).json({ message: 'Sample not found' });
-  return res.json(sample);
+  return res.json(await withResolvedRanges(sample.toJSON()));
 }
 
 // POST /api/lab/samples/:id/collect
@@ -73,16 +121,22 @@ async function enterResults(req, res) {
     return res.status(400).json({ message: 'results array is required' });
   }
 
-  const sample = await Sample.findOne({ where: { id: req.params.id, clientId }, include: [Report] });
+  const sample = await Sample.findOne({
+    where: { id: req.params.id, clientId },
+    include: [Report, { model: BillItem, include: [{ model: Bill, include: [Patient] }] }],
+  });
   if (!sample) return res.status(404).json({ message: 'Sample not found' });
   if (!['COLLECTED', 'RESULT_ENTERED', 'VERIFIED'].includes(sample.status)) {
     return res.status(400).json({ message: 'Sample must be collected before entering results' });
   }
 
+  const patient = sample.BillItem?.Bill?.Patient;
+
   for (const r of results) {
-    const parameter = await ParameterMaster.findByPk(r.parameterId);
+    const parameter = await ParameterMaster.findByPk(r.parameterId, { include: [ParameterNormalRange] });
     if (!parameter) continue;
-    const isAbnormal = isOutOfRange(r.value, parameter.normalRangeLow, parameter.normalRangeHigh);
+    const range = resolveNormalRange(parameter, patient?.age, patient?.gender);
+    const isAbnormal = isOutOfRange(r.value, range.normalRangeLow, range.normalRangeHigh);
 
     const [record] = await Result.findOrCreate({
       where: { sampleId: sample.id, parameterId: r.parameterId },
@@ -148,6 +202,10 @@ async function getBillReport(req, res) {
     return res.status(404).json({ message: 'No released reports for this bill yet' });
   }
 
+  const age = bill.Patient?.age;
+  const gender = bill.Patient?.gender;
+  await attachNormalRanges(releasedSamples.flatMap((s) => s.Results.map((r) => r.ParameterMaster)));
+
   return res.json({
     bill: {
       id: bill.id, billNo: bill.billNo, createdAt: bill.createdAt,
@@ -169,14 +227,18 @@ async function getBillReport(req, res) {
       barcode: s.barcode,
       collectedAt: s.collectedAt,
       releasedAt: s.Report.releasedAt,
-      parameters: s.Results.map((r) => ({
-        parameterName: r.ParameterMaster.parameterName,
-        value: r.value,
-        unit: r.ParameterMaster.unit,
-        normalRangeLow: r.ParameterMaster.normalRangeLow,
-        normalRangeHigh: r.ParameterMaster.normalRangeHigh,
-        isAbnormal: r.isAbnormal,
-      })),
+      parameters: s.Results.map((r) => {
+        const range = resolveNormalRange(r.ParameterMaster, age, gender);
+        return {
+          parameterCode: r.ParameterMaster.parameterCode,
+          parameterName: r.ParameterMaster.parameterName,
+          value: r.value,
+          unit: r.ParameterMaster.unit,
+          normalRangeLow: range.normalRangeLow,
+          normalRangeHigh: range.normalRangeHigh,
+          isAbnormal: r.isAbnormal,
+        };
+      }),
     })),
   });
 }
@@ -223,18 +285,21 @@ async function getBillTrendReport(req, res) {
   if (samples.length === 0) {
     return res.status(404).json({ message: 'No released reports for this bill yet' });
   }
+  await attachNormalRanges(samples.flatMap((s) => s.Results.map((r) => r.ParameterMaster)));
 
   const parameters = [];
   for (const sample of samples) {
     for (const result of sample.Results) {
       const param = result.ParameterMaster;
       const history = await getPatientParameterHistory(clientId, bill.patientId, param.id);
+      const range = resolveNormalRange(param, bill.Patient?.age, bill.Patient?.gender);
       parameters.push({
         testName: sample.BillItem.TestMaster.testName,
+        parameterCode: param.parameterCode,
         parameterName: param.parameterName,
         unit: param.unit,
-        normalRangeLow: param.normalRangeLow,
-        normalRangeHigh: param.normalRangeHigh,
+        normalRangeLow: range.normalRangeLow,
+        normalRangeHigh: range.normalRangeHigh,
         history,
         insight: buildParameterInsight(history),
       });

@@ -192,12 +192,28 @@ const TestMaster = sequelize.define('TestMaster', {
 // - which only that client ever sees, exactly like their own test prices.
 const ParameterMaster = sequelize.define('ParameterMaster', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  parameterCode: { type: DataTypes.STRING },
   parameterName: { type: DataTypes.STRING, allowNull: false },
   unit: { type: DataTypes.STRING },
+  // The default range, used whenever no age/gender-specific rule below matches.
   normalRangeLow: { type: DataTypes.STRING },
   normalRangeHigh: { type: DataTypes.STRING },
   ...AUDIT_FIELDS,
 }, { tableName: 'parameter_master' });
+
+// An age/gender-specific normal range rule for a parameter (e.g. Male 18-60,
+// Female 18-60, child 0-12). Resolved against a patient's own age/gender at
+// result-entry and report time; falls back to ParameterMaster's own
+// normalRangeLow/High above when nothing here matches.
+const ParameterNormalRange = sequelize.define('ParameterNormalRange', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  gender: { type: DataTypes.STRING, allowNull: false, defaultValue: 'Any' }, // Male | Female | Other | Any
+  ageMin: { type: DataTypes.INTEGER }, // null = no lower bound
+  ageMax: { type: DataTypes.INTEGER }, // null = no upper bound
+  normalRangeLow: { type: DataTypes.STRING },
+  normalRangeHigh: { type: DataTypes.STRING },
+  ...AUDIT_FIELDS,
+}, { tableName: 'parameter_normal_range' });
 
 // A client's own shortcut/abbreviated name for a test (e.g. for quick search
 // or a compact report layout), set per client just like ClientTestPrice.
@@ -558,6 +574,9 @@ Result.belongsTo(Sample, { foreignKey: 'sampleId' });
 ParameterMaster.hasMany(Result, { foreignKey: 'parameterId' });
 Result.belongsTo(ParameterMaster, { foreignKey: 'parameterId' });
 
+ParameterMaster.hasMany(ParameterNormalRange, { foreignKey: 'parameterId', onDelete: 'CASCADE' });
+ParameterNormalRange.belongsTo(ParameterMaster, { foreignKey: 'parameterId' });
+
 Sample.hasOne(Report, { foreignKey: 'sampleId', onDelete: 'CASCADE' });
 Report.belongsTo(Sample, { foreignKey: 'sampleId' });
 
@@ -624,6 +643,7 @@ module.exports = {
   ClientUser,
   TestMaster,
   ParameterMaster,
+  ParameterNormalRange,
   ClientTestShortName,
   ClientTestPrice,
   Package,

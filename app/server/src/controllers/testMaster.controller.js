@@ -1,6 +1,8 @@
 const { Op } = require('sequelize');
 const XLSX = require('xlsx');
-const { TestMaster, ParameterMaster } = require('../models');
+const { TestMaster, ParameterMaster, ParameterNormalRange } = require('../models');
+
+const GENDER_OPTIONS = ['Male', 'Female', 'Other', 'Any'];
 
 // Chief Admin adds to the shared/universal catalog (clientId null, seen by
 // everyone) exactly as before; a client-side user's own parameter is scoped
@@ -47,7 +49,7 @@ async function listTests(req, res) {
   const paramWhere = clientId ? { [Op.or]: [{ clientId: null }, { clientId }] } : { clientId: null };
 
   const tests = await TestMaster.findAll({
-    include: [{ model: ParameterMaster, where: paramWhere, required: false }],
+    include: [{ model: ParameterMaster, where: paramWhere, required: false, include: [ParameterNormalRange] }],
     order: [['testCode', 'ASC']],
   });
   return res.json(tests);
@@ -63,17 +65,78 @@ async function updateTest(req, res) {
 }
 
 // POST /api/masters/tests/:testId/parameters
+// Body: { parameterCode, parameterName, unit, normalRangeLow, normalRangeHigh,
+//         normalRanges?: [{ gender, ageMin, ageMax, normalRangeLow, normalRangeHigh }] }
+// normalRangeLow/High on the parameter itself are the default range, used
+// whenever a result's patient doesn't match any age/gender-specific rule
+// below. normalRanges is optional - a parameter can be created with just a
+// default range and have age/gender rules added to it later.
 async function addParameter(req, res) {
   const test = await TestMaster.findByPk(req.params.testId);
   if (!test) return res.status(404).json({ message: 'Test not found' });
 
-  const { parameterName, unit, normalRangeLow, normalRangeHigh } = req.body;
+  const { parameterCode, parameterName, unit, normalRangeLow, normalRangeHigh, normalRanges } = req.body;
   if (!parameterName) return res.status(400).json({ message: 'parameterName is required' });
+  if (!parameterCode?.trim()) return res.status(400).json({ message: 'parameterCode is required' });
+
+  if (normalRanges !== undefined) {
+    if (!Array.isArray(normalRanges)) return res.status(400).json({ message: 'normalRanges must be an array' });
+    for (const r of normalRanges) {
+      if (r.gender && !GENDER_OPTIONS.includes(r.gender)) {
+        return res.status(400).json({ message: `Invalid gender "${r.gender}" - must be one of ${GENDER_OPTIONS.join(', ')}` });
+      }
+    }
+  }
 
   const parameter = await ParameterMaster.create({
-    testId: test.id, clientId: requesterClientId(req), parameterName, unit, normalRangeLow, normalRangeHigh,
+    testId: test.id, clientId: requesterClientId(req), parameterCode: parameterCode.trim(), parameterName, unit, normalRangeLow, normalRangeHigh,
   });
-  return res.status(201).json(parameter);
+
+  for (const r of normalRanges || []) {
+    await ParameterNormalRange.create({
+      parameterId: parameter.id,
+      gender: r.gender || 'Any',
+      ageMin: r.ageMin === '' || r.ageMin == null ? null : Number(r.ageMin),
+      ageMax: r.ageMax === '' || r.ageMax == null ? null : Number(r.ageMax),
+      normalRangeLow: r.normalRangeLow,
+      normalRangeHigh: r.normalRangeHigh,
+    });
+  }
+
+  const full = await ParameterMaster.findByPk(parameter.id, { include: [ParameterNormalRange] });
+  return res.status(201).json(full);
+}
+
+// POST /api/masters/parameters/:parameterId/ranges  - add one age/gender-specific
+// normal range rule to an existing parameter.
+async function addNormalRange(req, res) {
+  const parameter = await ParameterMaster.findByPk(req.params.parameterId);
+  if (!parameter) return res.status(404).json({ message: 'Parameter not found' });
+
+  const { gender, ageMin, ageMax, normalRangeLow, normalRangeHigh } = req.body;
+  if (gender && !GENDER_OPTIONS.includes(gender)) {
+    return res.status(400).json({ message: `Invalid gender "${gender}" - must be one of ${GENDER_OPTIONS.join(', ')}` });
+  }
+  if (!normalRangeLow?.toString().trim() && !normalRangeHigh?.toString().trim()) {
+    return res.status(400).json({ message: 'At least one of normalRangeLow/normalRangeHigh is required' });
+  }
+
+  const range = await ParameterNormalRange.create({
+    parameterId: parameter.id,
+    gender: gender || 'Any',
+    ageMin: ageMin === '' || ageMin == null ? null : Number(ageMin),
+    ageMax: ageMax === '' || ageMax == null ? null : Number(ageMax),
+    normalRangeLow, normalRangeHigh,
+  });
+  return res.status(201).json(range);
+}
+
+// DELETE /api/masters/parameters/:parameterId/ranges/:rangeId
+async function deleteNormalRange(req, res) {
+  const range = await ParameterNormalRange.findOne({ where: { id: req.params.rangeId, parameterId: req.params.parameterId } });
+  if (!range) return res.status(404).json({ message: 'Normal range rule not found' });
+  await range.destroy();
+  return res.json({ message: 'Deleted' });
 }
 
 // GET /api/admin/masters/tests/template  - a ready-to-fill Excel sheet, one row
@@ -204,5 +267,6 @@ async function commitUpload(req, res) {
 }
 
 module.exports = {
-  createTest, listTests, updateTest, addParameter, downloadTemplate, previewUpload, commitUpload,
+  createTest, listTests, updateTest, addParameter, addNormalRange, deleteNormalRange,
+  downloadTemplate, previewUpload, commitUpload,
 };

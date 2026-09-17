@@ -121,11 +121,12 @@ export default function LabReport() {
             <h4 style={{ background: '#f1f5f9', padding: '6px 10px', borderRadius: 6 }}>{t.testName}</h4>
             <table>
               <thead>
-                <tr><th>Parameter</th><th>Result</th><th>Unit</th><th>Bio. Ref. Interval</th></tr>
+                <tr><th>Code</th><th>Parameter</th><th>Result</th><th>Unit</th><th>Bio. Ref. Interval</th></tr>
               </thead>
               <tbody>
                 {t.parameters.map((p) => (
                   <tr key={p.parameterName}>
+                    <td>{p.parameterCode || '—'}</td>
                     <td>{p.parameterName}</td>
                     <td style={p.isAbnormal ? { color: '#b91c1c', fontWeight: 700 } : undefined}>{p.value}</td>
                     <td>{p.unit || '—'}</td>
