@@ -13,7 +13,10 @@ async function generateUmr(clientId) {
  * Shared by the standalone patient-registration endpoint and by billing,
  * so a patient is only ever registered once no matter which screen is used.
  */
-async function findOrCreatePatient(clientId, { umr, name, age, gender, mobile, email, address }) {
+async function findOrCreatePatient(clientId, { umr, name, age, ageUnit, gender, mobile, email, address }) {
+  if (mobile && mobile.length > 10) {
+    throw new Error('Mobile number cannot be more than 10 digits');
+  }
   if (umr) {
     const byUmr = await Patient.findOne({ where: { clientId, umr } });
     if (byUmr) return byUmr;
@@ -25,17 +28,17 @@ async function findOrCreatePatient(clientId, { umr, name, age, gender, mobile, e
   if (!name) throw new Error('Patient name is required to register a new patient');
 
   const newUmr = await generateUmr(clientId);
-  return Patient.create({ clientId, umr: newUmr, name, age, gender, mobile, email, address });
+  return Patient.create({ clientId, umr: newUmr, name, age, ageUnit: ageUnit || 'Years', gender, mobile, email, address });
 }
 
 // POST /api/patients
 async function createPatient(req, res) {
   const { clientId } = req.user;
-  const { name, age, gender, mobile, email, address } = req.body;
+  const { name, age, ageUnit, gender, mobile, email, address } = req.body;
   if (!name) return res.status(400).json({ message: 'Patient name is required' });
 
   try {
-    const patient = await findOrCreatePatient(clientId, { name, age, gender, mobile, email, address });
+    const patient = await findOrCreatePatient(clientId, { name, age, ageUnit, gender, mobile, email, address });
     return res.status(201).json(patient);
   } catch (err) {
     return res.status(400).json({ message: err.message });

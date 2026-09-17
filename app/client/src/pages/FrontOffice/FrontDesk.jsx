@@ -8,7 +8,7 @@ function todayISO() {
 }
 
 function blankPatientForm() {
-  return { name: '', age: '', gender: 'Male', mobile: '', email: '', address: '' };
+  return { name: '', age: '', ageUnit: 'Years', gender: 'Male', mobile: '', email: '', address: '' };
 }
 
 function IconSearch() {
@@ -50,6 +50,7 @@ export default function FrontDesk() {
 
   const [bill, setBill] = useState(null);
   const [error, setError] = useState('');
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     api.get('/billing/test-prices').then((r) => setPrices(r.data));
@@ -133,6 +134,7 @@ export default function FrontDesk() {
 
   async function handleGenerateBill(e) {
     e.preventDefault();
+    if (generating) return;
     setError('');
     if (!isCredit && !paymentMode) {
       setError('Payment Mode is required.');
@@ -146,6 +148,7 @@ export default function FrontDesk() {
       setError(`Payment Transaction Number is required for ${paymentMode} payments.`);
       return;
     }
+    setGenerating(true);
     try {
       const payload = {
         testIds: selectedTests,
@@ -170,6 +173,8 @@ export default function FrontDesk() {
       setBill(full);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to generate bill');
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -280,7 +285,14 @@ export default function FrontDesk() {
 
         <div className="form-grid">
           <label><span>Mobile No *</span>
-            <input value={patientForm.mobile} onChange={(e) => setPatientForm((f) => ({ ...f, mobile: e.target.value }))} disabled={!!patient} required />
+            <input
+              value={patientForm.mobile}
+              onChange={(e) => setPatientForm((f) => ({ ...f, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+              disabled={!!patient}
+              inputMode="numeric"
+              maxLength={10}
+              required
+            />
           </label>
           <label><span>Patient Name *</span>
             <input value={patientForm.name} onChange={(e) => setPatientForm((f) => ({ ...f, name: e.target.value }))} disabled={!!patient} required />
@@ -401,7 +413,7 @@ export default function FrontDesk() {
           </label>
         </div>
         {error && <p className="error-text">{error}</p>}
-        <button onClick={handleGenerateBill} disabled={selectedTests.length === 0 || (!isCredit && !paymentMode)}>Generate Bill</button>
+        <button onClick={handleGenerateBill} disabled={generating || selectedTests.length === 0 || (!isCredit && !paymentMode)}>{generating ? 'Generating…' : 'Generate Bill'}</button>
       </div>
     </div>
   );

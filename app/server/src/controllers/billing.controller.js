@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { Op } = require('sequelize');
 const {
   sequelize, Bill, BillItem, Refund, BillDiscount, ClientTestPrice, TestMaster, Sample, Report, Patient, ReferralDoctor,
   Client, Payor, PayorTestPrice, ClientTestShortName,
@@ -30,7 +31,7 @@ const billIncludes = [
 async function createBill(req, res) {
   const { clientId, id: userId } = req.user;
   const {
-    patientId, umr, name, age, gender, mobile, email, address,
+    patientId, umr, name, age, ageUnit, gender, mobile, email, address,
     testIds, referredDoctorName, walkInDate, discount, paymentMode, visitAddress, transactionNumber, remarks, payorId,
   } = req.body;
 
@@ -53,7 +54,7 @@ async function createBill(req, res) {
     if (!patient) return res.status(404).json({ message: 'Patient not found' });
   } else {
     try {
-      patient = await findOrCreatePatient(clientId, { umr, name, age, gender, mobile, email, address });
+      patient = await findOrCreatePatient(clientId, { umr, name, age, ageUnit, gender, mobile, email, address });
     } catch (err) {
       return res.status(400).json({ message: err.message });
     }
@@ -83,6 +84,23 @@ async function createBill(req, res) {
 
   const doctor = referredDoctorName ? await findOrCreateDoctor(clientId, referredDoctorName) : null;
   const discountAmount = Number(discount) || 0;
+
+  // Guard against duplicate bills from a rapid double-click / double-submit:
+  // if the same patient already got a bill for the exact same set of tests
+  // within the last 10 seconds, return that bill instead of creating another.
+  const sortedTestIds = [...testIds].map(String).sort();
+  const recentDuplicate = await Bill.findOne({
+    where: { clientId, patientId: patient.id, createdAt: { [Op.gte]: new Date(Date.now() - 10000) } },
+    include: [{ model: BillItem }],
+    order: [['createdAt', 'DESC']],
+  });
+  if (recentDuplicate) {
+    const existingTestIds = recentDuplicate.BillItems.map((bi) => String(bi.testId)).sort();
+    if (existingTestIds.length === sortedTestIds.length && existingTestIds.every((v, i) => v === sortedTestIds[i])) {
+      const full = await Bill.findOne({ where: { id: recentDuplicate.id, clientId }, include: billIncludes });
+      return res.status(200).json(full);
+    }
+  }
 
   try {
     const result = await sequelize.transaction(async (t) => {
