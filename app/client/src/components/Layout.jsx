@@ -6,19 +6,83 @@ import { Icon } from './Icons';
 import api from '../api/client';
 
 // Every screen a client-side role can be granted, keyed by the same screen
-// key the backend's RoleScreenDefault/ClientRoleScreen tables use.
+// key the backend's RoleScreenDefault/ClientRoleScreen tables use. `group`
+// controls which labelled section of the sidebar it's rendered under.
 export const SCREEN_CATALOG = [
-  { key: 'masters', to: '/app/masters', label: 'Masters & Pricing', icon: 'masters' },
-  { key: 'payors', to: '/app/payors', label: 'Payors', icon: 'building' },
-  { key: 'tickets', to: '/app/tickets', label: 'Tickets', icon: 'tickets' },
-  { key: 'billing', to: '/app/billing', label: 'Patient & Billing', icon: 'billing' },
-  { key: 'orders', to: '/app/orders', label: 'Orders', icon: 'orders' },
-  { key: 'lab', to: '/app/lab', label: 'Laboratory', icon: 'lab' },
-  { key: 'reports', to: '/app/reports', label: 'Reports', icon: 'reports' },
-  { key: 'report-branding', to: '/app/report-branding', label: 'Report Branding', icon: 'branding' },
-  { key: 'payor-invoices', to: '/app/payor-invoices', label: 'Payor Invoices', icon: 'invoice' },
-  { key: 'test-parameters', to: '/app/test-parameters', label: 'Test Parameters', icon: 'masters' },
+  { key: 'billing', to: '/app/billing', label: 'Patient & Billing', icon: 'billing', group: 'Front Office' },
+  { key: 'orders', to: '/app/orders', label: 'Orders', icon: 'orders', group: 'Front Office' },
+  { key: 'lab', to: '/app/lab', label: 'Laboratory', icon: 'lab', group: 'Laboratory' },
+  { key: 'reports', to: '/app/reports', label: 'Reports', icon: 'reports', group: 'Manager' },
+  { key: 'report-branding', to: '/app/report-branding', label: 'Report Branding', icon: 'branding', group: 'Manager' },
+  { key: 'payor-invoices', to: '/app/payor-invoices', label: 'Payor Invoices', icon: 'invoice', group: 'Manager' },
+  { key: 'test-parameters', to: '/app/test-parameters', label: 'Test Parameters', icon: 'masters', group: 'Manager' },
+  { key: 'masters', to: '/app/masters', label: 'Masters & Pricing', icon: 'masters', group: 'Admin' },
+  { key: 'payors', to: '/app/payors', label: 'Payors', icon: 'building', group: 'Admin' },
+  { key: 'tickets', to: '/app/tickets', label: 'Tickets', icon: 'tickets', group: 'General' },
 ];
+
+const NAV_GROUP_ORDER = ['Front Office', 'Laboratory', 'Manager', 'Admin', 'General'];
+
+/** Buckets a filtered link list into the labelled sections the sidebar renders, in a fixed order, dropping empty sections. */
+function groupNavLinks(links) {
+  const byGroup = new Map();
+  for (const item of links) {
+    if (!byGroup.has(item.group)) byGroup.set(item.group, []);
+    byGroup.get(item.group).push(item);
+  }
+  return NAV_GROUP_ORDER.map((label) => ({ label, items: byGroup.get(label) || [] })).filter((g) => g.items.length > 0);
+}
+
+function initial(name) {
+  return (name || '?').trim().charAt(0).toUpperCase() || '?';
+}
+
+function useClock() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+function TopbarClock() {
+  const now = useClock();
+  const dateStr = now.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+  const timeStr = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return (
+    <div className="topbar-center">
+      <div className="topbar-clock">
+        <Icon name="clock" size={14} />
+        <span>{dateStr} · {timeStr}</span>
+      </div>
+    </div>
+  );
+}
+
+function TopbarUser({ name, meta }) {
+  return (
+    <div className="topbar-user">
+      <div className="topbar-user-info">
+        <div className="name">{name}</div>
+        {meta && <div className="meta">{meta}</div>}
+      </div>
+      <div className="avatar-circle">{initial(name)}</div>
+    </div>
+  );
+}
+
+function SidebarBrand({ title, subtitle }) {
+  return (
+    <div className="sidebar-brand">
+      <div className="mark-icon"><Icon name="lab" size={18} /></div>
+      <div className="sidebar-brand-text">
+        {title}
+        {subtitle && <span>{subtitle}</span>}
+      </div>
+    </div>
+  );
+}
 
 // Used only until the real effective map has loaded from the server, or if
 // that fetch fails - mirrors the screens each role could already reach
@@ -48,18 +112,27 @@ export function ChiefAdminLayout() {
     <div className="app-shell">
       <div className={`sidebar-overlay${navOpen ? ' open' : ''}`} onClick={() => setNavOpen(false)} />
       <aside className={`sidebar${navOpen ? ' open' : ''}`}>
-        <h2>Chief Admin</h2>
+        <SidebarBrand title="Chief Admin" subtitle="Control Center" />
         <nav onClick={() => setNavOpen(false)}>
-          <NavLink to="/chief-admin" end>Dashboard</NavLink>
-          <NavLink to="/chief-admin/clients/new">Create Client</NavLink>
-          {isAdmin && <NavLink to="/chief-admin/masters">Test Master</NavLink>}
-          {isAdmin && <NavLink to="/chief-admin/users">Team</NavLink>}
-          {isAdmin && <NavLink to="/chief-admin/tickets">Tickets</NavLink>}
-          {isAdmin && <NavLink to="/chief-admin/integrations">Integrations</NavLink>}
-          {isAdmin && <NavLink to="/chief-admin/sales-dashboard">Sales Dashboard</NavLink>}
-          {(isAdmin || isMarketing) && <NavLink to="/chief-admin/team-passwords">Reset Passwords</NavLink>}
-          {isAdmin && <NavLink to="/chief-admin/role-screen-defaults">Role Screen Defaults</NavLink>}
-          <NavLink to="/chief-admin/reset-password">My Password</NavLink>
+          <NavLink to="/chief-admin" end><Icon name="dashboard" size={17} /><span>Dashboard</span></NavLink>
+          {isAdmin && (
+            <>
+              <div className="nav-group-label">Administration</div>
+              <NavLink to="/chief-admin/clients/new"><Icon name="building" size={17} /><span>Create Client</span></NavLink>
+              <NavLink to="/chief-admin/masters"><Icon name="masters" size={17} /><span>Test Master</span></NavLink>
+              <NavLink to="/chief-admin/users"><Icon name="team" size={17} /><span>Team</span></NavLink>
+              <NavLink to="/chief-admin/tickets"><Icon name="tickets" size={17} /><span>Tickets</span></NavLink>
+              <NavLink to="/chief-admin/integrations"><Icon name="plug" size={17} /><span>Integrations</span></NavLink>
+              <NavLink to="/chief-admin/sales-dashboard"><Icon name="reports" size={17} /><span>Sales Dashboard</span></NavLink>
+              <NavLink to="/chief-admin/role-screen-defaults"><Icon name="branding" size={17} /><span>Role Screen Defaults</span></NavLink>
+            </>
+          )}
+          {!isAdmin && isMarketing && <div className="nav-group-label">Administration</div>}
+          {(isAdmin || isMarketing) && (
+            <NavLink to="/chief-admin/team-passwords"><Icon name="lock" size={17} /><span>Reset Passwords</span></NavLink>
+          )}
+          <div className="nav-group-label">Account</div>
+          <NavLink to="/chief-admin/reset-password"><Icon name="lock" size={17} /><span>My Password</span></NavLink>
         </nav>
       </aside>
       <main className="main-content">
@@ -68,9 +141,12 @@ export function ChiefAdminLayout() {
             <button className="hamburger-btn" aria-label="Open menu" onClick={() => setNavOpen(true)}>
               <Icon name="menu" size={18} />
             </button>
-            <div>Signed in as <strong>{auth?.user?.username}</strong> · {roles.join(' + ')}</div>
           </div>
-          <button className="secondary" onClick={logout}>Logout</button>
+          <TopbarClock />
+          <div className="topbar-right">
+            <TopbarUser name={auth?.user?.username} meta={roles.join(' + ')} />
+            <button className="secondary" onClick={logout}><Icon name="logout" size={15} /> Logout</button>
+          </div>
         </div>
         <Outlet />
       </main>
@@ -94,13 +170,19 @@ export function AppLayout() {
     <div className="app-shell">
       <div className={`sidebar-overlay${navOpen ? ' open' : ''}`} onClick={() => setNavOpen(false)} />
       <aside className={`sidebar${navOpen ? ' open' : ''}`}>
-        <h2>{auth?.client?.clientName}</h2>
+        <SidebarBrand title={auth?.client?.clientName} subtitle="LIMS" />
         <nav onClick={() => setNavOpen(false)}>
-          <NavLink to="/app" end>Home</NavLink>
-          {links.map((item) => (
-            <NavLink key={item.to} to={item.to}>{item.label}</NavLink>
+          <NavLink to="/app" end><Icon name="home" size={17} /><span>Home</span></NavLink>
+          {groupNavLinks(links).map((g) => (
+            <div className="nav-group" key={g.label}>
+              <div className="nav-group-label">{g.label}</div>
+              {g.items.map((item) => (
+                <NavLink key={item.to} to={item.to}><Icon name={item.icon} size={17} /><span>{item.label}</span></NavLink>
+              ))}
+            </div>
           ))}
-          <NavLink to="/app/reset-password">Reset Password</NavLink>
+          <div className="nav-group-label">Account</div>
+          <NavLink to="/app/reset-password"><Icon name="lock" size={17} /><span>Reset Password</span></NavLink>
         </nav>
       </aside>
       <main className="main-content">
@@ -109,16 +191,15 @@ export function AppLayout() {
             <button className="hamburger-btn" aria-label="Open menu" onClick={() => setNavOpen(true)}>
               <Icon name="menu" size={18} />
             </button>
-            <div>
-              {auth?.user?.username} · {roles.join(' + ')} ·{' '}
-              <span className={`badge ${auth?.client?.paymentStatus}`}>{auth?.client?.paymentStatus}</span>
-            </div>
+            <span className={`badge ${auth?.client?.paymentStatus}`}>{auth?.client?.paymentStatus}</span>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <TopbarClock />
+          <div className="topbar-right">
             {!paymentRequired && (
               <button className="secondary" onClick={() => setShowPaymentModal(true)}>Pay in Advance</button>
             )}
-            <button className="secondary" onClick={logout}>Logout</button>
+            <TopbarUser name={auth?.user?.username} meta={roles.join(' + ')} />
+            <button className="secondary" onClick={logout}><Icon name="logout" size={15} /> Logout</button>
           </div>
         </div>
         <Outlet context={{ roleScreens }} />

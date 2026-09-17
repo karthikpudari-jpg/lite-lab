@@ -12,6 +12,12 @@ const PATHS = {
   menu: 'M4 6h16M4 12h16M4 18h16',
   close: 'M6 6l12 12M18 6L6 18',
   invoice: 'M6 2h12a1 1 0 0 1 1 1v18l-3-2-2 2-2-2-2 2-2-2-3 2V3a1 1 0 0 1 1-1zM8 7h8M8 11h8M8 15h5',
+  home: 'M3 11l9-8 9 8M5 10v10h14V10M9 21v-6h6v6',
+  dashboard: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+  team: 'M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 21v-1a5 5 0 0 1 5-5h2a5 5 0 0 1 5 5v1M17 5.1a3 3 0 0 1 0 5.8M23 21v-1a5 5 0 0 0-4-4.9',
+  plug: 'M9 2v4M15 2v4M6 8h12l-1 4a5 5 0 0 1-10 0zM8 16v2a4 4 0 0 0 8 0v-2',
+  lock: 'M6 11V7a6 6 0 0 1 12 0v4M5 11h14v10H5zM12 15v3',
+  logout: 'M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3',
 };
 
 export function Icon({ name, size = 20, ...rest }) {
