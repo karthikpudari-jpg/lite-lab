@@ -202,12 +202,12 @@ export default function ReviewResults({ group, focusSampleId, onClose, onSaved }
       </div>
 
       <div className="review-footer">
-        <span className="checked-count">{checkedSamples.length} of {eligibleSamples.length} test(s) checked</span>
         <button onClick={handleSubmit} disabled={busy || checkedSamples.length === 0}>
           {busy ? 'Saving…' : allCheckedReady
             ? `Mark Reviewed ${checkedSamples.length} Test${checkedSamples.length === 1 ? '' : 's'}`
             : `Save Results (${checkedSamples.length})`}
         </button>
+        <span className="checked-count">{checkedSamples.length} of {eligibleSamples.length} test(s) checked</span>
       </div>
     </div>
   );

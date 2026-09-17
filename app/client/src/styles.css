@@ -466,6 +466,10 @@ input, select, textarea {
 .review-footer {
   border-top: 1px solid #e2e8f0; padding: 14px 22px; display: flex; align-items: center; justify-content: space-between;
   flex-shrink: 0;
+  /* Keeps clear of any bottom-right page badge/widget (e.g. a hosting
+     provider's own on-page badge) that could otherwise sit on top of and
+     block clicks on the action button. */
+  padding-right: 180px;
 }
 .review-footer .checked-count { font-size: 13px; color: #64748b; }
 
