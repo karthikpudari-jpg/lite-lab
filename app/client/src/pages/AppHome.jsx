@@ -104,7 +104,7 @@ export default function AppHome() {
             <div className="home-hero-expiry">
               <div
                 className="home-hero-expiry-value"
-                style={{ color: daysLeft < 0 ? '#f87171' : (daysLeft <= EXPIRY_WARNING_DAYS ? '#fbbf24' : '#4ade80') }}
+                style={{ color: daysLeft < 0 ? '#f87171' : (daysLeft <= EXPIRY_WARNING_DAYS ? '#fbbf24' : '#ffffff') }}
               >
                 {daysLeft < 0 ? `-${Math.abs(daysLeft)}` : daysLeft}
               </div>
