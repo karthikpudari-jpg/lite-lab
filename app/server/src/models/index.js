@@ -94,6 +94,10 @@ const Client = sequelize.define('Client', {
   active: { type: DataTypes.BOOLEAN, defaultValue: true },
   reportLogoPath: { type: DataTypes.STRING },
   reportLetterheadPath: { type: DataTypes.STRING },
+  // Chief-Admin-controlled: whether this clinic's Front Office can cancel a
+  // billed test and record a refund against it. Off by default since it
+  // touches money - a clinic has to be explicitly opted in.
+  allowBillCancellationRefund: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
   ...AUDIT_FIELDS,
 }, { tableName: 'client' });
 
@@ -348,15 +352,30 @@ const BillItem = sequelize.define('BillItem', {
   // normal walk-in, but kept separately so a Payor invoice can show the
   // discount given (originalPrice - price) even after prices change later.
   originalPrice: { type: DataTypes.DECIMAL(10, 2) },
+  // A single test within a bill can be cancelled independently of the rest
+  // of the bill ("test-wise" cancellation) - see Refund below for the money.
+  status: { type: DataTypes.ENUM('ACTIVE', 'CANCELLED'), allowNull: false, defaultValue: 'ACTIVE' },
   ...AUDIT_FIELDS,
 }, { tableName: 'bill_item' });
+
+// One row per refund payout against a cancelled BillItem. Kept as its own
+// table (rather than a single amount on BillItem) so a partial refund now
+// and a further partial refund later both have their own record, and so the
+// payment mode/reason of each payout is tracked individually.
+const Refund = sequelize.define('Refund', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  amount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+  mode: { type: DataTypes.STRING, allowNull: false },
+  reason: { type: DataTypes.STRING },
+  ...AUDIT_FIELDS,
+}, { tableName: 'refund' });
 
 // ---- LAB ------------------------------------------------------------------
 const Sample = sequelize.define('Sample', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   barcode: { type: DataTypes.STRING, unique: true, allowNull: false },
   status: {
-    type: DataTypes.ENUM('PENDING_COLLECTION', 'COLLECTED', 'RESULT_ENTERED', 'VERIFIED', 'RELEASED'),
+    type: DataTypes.ENUM('PENDING_COLLECTION', 'COLLECTED', 'RESULT_ENTERED', 'VERIFIED', 'RELEASED', 'CANCELLED'),
     allowNull: false,
     defaultValue: 'PENDING_COLLECTION',
   },
@@ -497,6 +516,11 @@ BillItem.belongsTo(TestMaster, { foreignKey: 'testId' });
 BillItem.hasOne(Sample, { foreignKey: 'billItemId' });
 Sample.belongsTo(BillItem, { foreignKey: 'billItemId' });
 
+Bill.hasMany(Refund, { foreignKey: 'billId', onDelete: 'CASCADE' });
+Refund.belongsTo(Bill, { foreignKey: 'billId' });
+BillItem.hasMany(Refund, { foreignKey: 'billItemId', onDelete: 'CASCADE' });
+Refund.belongsTo(BillItem, { foreignKey: 'billItemId' });
+
 Client.hasMany(Sample, { foreignKey: 'clientId', onDelete: 'CASCADE' });
 Sample.belongsTo(Client, { foreignKey: 'clientId' });
 
@@ -584,6 +608,7 @@ module.exports = {
   PayorInvoiceCollection,
   Bill,
   BillItem,
+  Refund,
   Sample,
   Result,
   Report,

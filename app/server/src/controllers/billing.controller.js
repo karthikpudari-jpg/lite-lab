@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const {
-  sequelize, Bill, BillItem, ClientTestPrice, TestMaster, Sample, Report, Patient, ReferralDoctor, Client,
+  sequelize, Bill, BillItem, Refund, ClientTestPrice, TestMaster, Sample, Report, Patient, ReferralDoctor, Client,
   Payor, PayorTestPrice, ClientTestShortName,
 } = require('../models');
 const { findOrCreatePatient } = require('./patient.controller');
@@ -14,7 +14,7 @@ const billIncludes = [
   Patient,
   ReferralDoctor,
   Payor,
-  { model: BillItem, include: [TestMaster, { model: Sample, include: [Report] }] },
+  { model: BillItem, include: [TestMaster, { model: Sample, include: [Report] }, Refund] },
 ];
 
 // POST /api/billing/bills
@@ -130,6 +130,73 @@ async function getBill(req, res) {
   return res.json(bill);
 }
 
+// PUT /api/billing/bills/:billId/items/:itemId/cancel
+// Body: { amount, mode, reason }  -- cancels one test within a bill and
+// records a refund payout against it. Test-wise, not whole-bill: the rest of
+// the bill's tests are untouched. `amount` can be less than the test's price
+// (a partial refund), and further partial refunds can be recorded later up
+// to whatever's left of the price.
+async function cancelBillItem(req, res) {
+  const { clientId } = req.user;
+  const { billId, itemId } = req.params;
+  const { amount, mode, reason } = req.body;
+
+  const client = await Client.findByPk(clientId);
+  if (!client?.allowBillCancellationRefund) {
+    return res.status(403).json({ message: 'Cancellation & refund is not enabled for this clinic. Contact your administrator.' });
+  }
+
+  const refundAmount = Number(amount);
+  if (!refundAmount || refundAmount <= 0) {
+    return res.status(400).json({ message: 'A refund amount greater than 0 is required' });
+  }
+  if (!mode?.trim()) {
+    return res.status(400).json({ message: 'Refund payment mode is required' });
+  }
+
+  const bill = await Bill.findOne({ where: { id: billId, clientId } });
+  if (!bill) return res.status(404).json({ message: 'Bill not found' });
+
+  const billItem = await BillItem.findOne({
+    where: { id: itemId, billId: bill.id },
+    include: [{ model: Sample, include: [Report] }, Refund, TestMaster],
+  });
+  if (!billItem) return res.status(404).json({ message: 'Test not found on this bill' });
+  if (billItem.status === 'CANCELLED') return res.status(400).json({ message: 'This test is already cancelled' });
+  if (billItem.Sample?.status === 'RELEASED') {
+    return res.status(400).json({ message: 'Cannot cancel a test whose report has already been released' });
+  }
+
+  const alreadyRefunded = (billItem.Refunds || []).reduce((sum, r) => sum + Number(r.amount), 0);
+  const maxRefundable = Number(billItem.price) - alreadyRefunded;
+  if (refundAmount > maxRefundable) {
+    return res.status(400).json({ message: `Refund amount cannot exceed ₹${maxRefundable.toFixed(2)} remaining on this test` });
+  }
+
+  const result = await sequelize.transaction(async (t) => {
+    const refund = await Refund.create({
+      billId: bill.id, billItemId: billItem.id, amount: refundAmount, mode, reason: reason || null,
+    }, { transaction: t });
+
+    billItem.status = 'CANCELLED';
+    await billItem.save({ transaction: t });
+
+    if (billItem.Sample) {
+      billItem.Sample.status = 'CANCELLED';
+      await billItem.Sample.save({ transaction: t });
+    }
+
+    // paidAmount reflects net revenue actually retained, so it drops by the refund.
+    bill.paidAmount = Math.max(0, Number(bill.paidAmount) - refundAmount);
+    await bill.save({ transaction: t });
+
+    return refund;
+  });
+
+  const full = await Bill.findOne({ where: { id: bill.id, clientId }, include: [...billIncludes, Client] });
+  return res.status(201).json({ refund: result, bill: full });
+}
+
 // GET /api/billing/bills  (grid view - includes per-test status for each order)
 async function listBills(req, res) {
   const { clientId } = req.user;
@@ -153,9 +220,13 @@ async function listBills(req, res) {
     referredDoctor: b.ReferralDoctor?.name || null,
     payor: b.Payor?.name || null,
     tests: b.BillItems.map((item) => ({
+      id: item.id,
       testName: item.TestMaster?.testName,
+      price: item.price,
+      itemStatus: item.status,
       status: item.Sample?.status,
       reportStatus: item.Sample?.Report?.status,
+      refundedAmount: (item.Refunds || []).reduce((sum, r) => sum + Number(r.amount), 0),
     })),
   }));
 
@@ -193,5 +264,5 @@ async function listPayorTestPrices(req, res) {
 }
 
 module.exports = {
-  createBill, getBill, listBills, listTestPrices, listPayors, listPayorTestPrices,
+  createBill, getBill, listBills, listTestPrices, listPayors, listPayorTestPrices, cancelBillItem,
 };

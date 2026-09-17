@@ -13,5 +13,6 @@ router.get('/payors/:id/test-prices', billingCtrl.listPayorTestPrices);
 router.post('/bills', billingCtrl.createBill);
 router.get('/bills', billingCtrl.listBills);
 router.get('/bills/:id', billingCtrl.getBill);
+router.put('/bills/:billId/items/:itemId/cancel', billingCtrl.cancelBillItem);
 
 module.exports = router;

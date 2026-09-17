@@ -205,7 +205,7 @@ async function updateClient(req, res) {
   const client = await Client.findByPk(req.params.id);
   if (!client) return res.status(404).json({ message: 'Client not found' });
 
-  const { clientName, mobile, email, address, salesPerson, marketingPersonPrice, active } = req.body;
+  const { clientName, mobile, email, address, salesPerson, marketingPersonPrice, active, allowBillCancellationRefund } = req.body;
 
   let monthlyAmount = client.monthlyAmount;
   let marketingFee = client.marketingPersonPrice;
@@ -225,6 +225,7 @@ async function updateClient(req, res) {
     marketingPersonPrice: marketingFee,
     monthlyAmount,
     active: active ?? client.active,
+    allowBillCancellationRefund: allowBillCancellationRefund ?? client.allowBillCancellationRefund,
   });
   return res.json(client);
 }

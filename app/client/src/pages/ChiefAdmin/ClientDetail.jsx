@@ -38,6 +38,7 @@ export default function ClientDetail() {
       marketingPersonPrice: String(clientRes.data.marketingPersonPrice ?? 0),
       monthlyAmount: clientRes.data.monthlyAmount,
       active: clientRes.data.active,
+      allowBillCancellationRefund: clientRes.data.allowBillCancellationRefund,
     });
     setUsers(clientRes.data.ClientUsers || []);
     setUserRoleEdits({});
@@ -143,6 +144,15 @@ export default function ClientDetail() {
             <select value={form.active ? 'yes' : 'no'} onChange={(e) => setForm((f) => ({ ...f, active: e.target.value === 'yes' }))}>
               <option value="yes">Active</option>
               <option value="no">Inactive</option>
+            </select>
+          </label>
+          <label><span>Bill Cancellation & Refund</span>
+            <select
+              value={form.allowBillCancellationRefund ? 'yes' : 'no'}
+              onChange={(e) => setForm((f) => ({ ...f, allowBillCancellationRefund: e.target.value === 'yes' }))}
+            >
+              <option value="no">Disabled</option>
+              <option value="yes">Enabled</option>
             </select>
           </label>
           <button type="submit">Save Changes</button>

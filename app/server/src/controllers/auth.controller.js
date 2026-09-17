@@ -77,6 +77,7 @@ async function clientUserLogin(req, res) {
       clientCode: client.clientCode,
       clientName: client.clientName,
       paymentStatus,
+      allowBillCancellationRefund: client.allowBillCancellationRefund,
     },
   });
 }
