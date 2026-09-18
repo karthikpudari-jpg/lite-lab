@@ -191,6 +191,11 @@ const TestMaster = sequelize.define('TestMaster', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   testCode: { type: DataTypes.STRING, unique: true, allowNull: false },
   testName: { type: DataTypes.STRING, allowNull: false },
+  // Free-text grouping (e.g. "Haematology", "Biochemistry") so the Test
+  // Parameters screen can filter tests by group; left blank a test is just
+  // "Uncategorized". Sample type (e.g. "Blood", "Urine") is informational.
+  category: { type: DataTypes.STRING },
+  sampleType: { type: DataTypes.STRING },
   active: { type: DataTypes.BOOLEAN, defaultValue: true },
   ...AUDIT_FIELDS,
 }, { tableName: 'test_master' });

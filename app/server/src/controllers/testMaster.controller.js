@@ -30,7 +30,7 @@ async function generateParameterCode(parameterName) {
 
 // POST /api/masters/tests
 async function createTest(req, res) {
-  const { testCode, testName, parameters } = req.body;
+  const { testCode, testName, category, sampleType, parameters } = req.body;
   if (!testCode || !testName) {
     return res.status(400).json({ message: 'testCode and testName are required' });
   }
@@ -38,7 +38,7 @@ async function createTest(req, res) {
   const existing = await TestMaster.findOne({ where: { testCode } });
   if (existing) return res.status(409).json({ message: 'Test Code already exists' });
 
-  const test = await TestMaster.create({ testCode, testName });
+  const test = await TestMaster.create({ testCode, testName, category, sampleType });
 
   if (Array.isArray(parameters)) {
     const clientId = requesterClientId(req);
@@ -78,8 +78,13 @@ async function listTests(req, res) {
 async function updateTest(req, res) {
   const test = await TestMaster.findByPk(req.params.id);
   if (!test) return res.status(404).json({ message: 'Test not found' });
-  const { testName, active } = req.body;
-  await test.update({ testName: testName ?? test.testName, active: active ?? test.active });
+  const { testName, category, sampleType, active } = req.body;
+  await test.update({
+    testName: testName ?? test.testName,
+    category: category !== undefined ? category : test.category,
+    sampleType: sampleType !== undefined ? sampleType : test.sampleType,
+    active: active ?? test.active,
+  });
   return res.json(test);
 }
 
@@ -213,14 +218,16 @@ async function downloadTemplate(req, res) {
     const params = t.ParameterMasters || [];
     if (params.length === 0) {
       rows.push({
-        TEST_CODE: t.testCode, TEST_NAME: t.testName, PARAMETER_NAME: '', UNIT: '', METHOD: '',
+        TEST_CODE: t.testCode, TEST_NAME: t.testName, TEST_CATEGORY: t.category || '', SAMPLE_TYPE: t.sampleType || '',
+        PARAMETER_NAME: '', UNIT: '', METHOD: '',
         NORMAL_RANGE_LOW: '', NORMAL_RANGE_HIGH: '', GENDER: '', AGE_MIN: '', AGE_MAX: '', AGE_UNIT: '', RANGE_LOW: '', RANGE_HIGH: '',
       });
       continue;
     }
     for (const p of params) {
       const base = {
-        TEST_CODE: t.testCode, TEST_NAME: t.testName, PARAMETER_NAME: p.parameterName,
+        TEST_CODE: t.testCode, TEST_NAME: t.testName, TEST_CATEGORY: t.category || '', SAMPLE_TYPE: t.sampleType || '',
+        PARAMETER_NAME: p.parameterName,
         UNIT: p.unit || '', METHOD: p.method || '', NORMAL_RANGE_LOW: p.normalRangeLow || '', NORMAL_RANGE_HIGH: p.normalRangeHigh || '',
       };
       const ranges = p.ParameterNormalRanges || [];
@@ -239,15 +246,18 @@ async function downloadTemplate(req, res) {
   if (rows.length === 0) {
     rows.push(
       {
-        TEST_CODE: 'CBC001', TEST_NAME: 'Complete Blood Count', PARAMETER_NAME: 'Hemoglobin', UNIT: 'g/dL', METHOD: 'Photometry',
+        TEST_CODE: 'CBC001', TEST_NAME: 'Complete Blood Count', TEST_CATEGORY: 'Haematology', SAMPLE_TYPE: 'Blood',
+        PARAMETER_NAME: 'Hemoglobin', UNIT: 'g/dL', METHOD: 'Photometry',
         NORMAL_RANGE_LOW: '13', NORMAL_RANGE_HIGH: '17', GENDER: '', AGE_MIN: '', AGE_MAX: '', AGE_UNIT: '', RANGE_LOW: '', RANGE_HIGH: '',
       },
       {
-        TEST_CODE: 'CBC001', TEST_NAME: 'Complete Blood Count', PARAMETER_NAME: 'Hemoglobin', UNIT: 'g/dL', METHOD: 'Photometry',
+        TEST_CODE: 'CBC001', TEST_NAME: 'Complete Blood Count', TEST_CATEGORY: 'Haematology', SAMPLE_TYPE: 'Blood',
+        PARAMETER_NAME: 'Hemoglobin', UNIT: 'g/dL', METHOD: 'Photometry',
         NORMAL_RANGE_LOW: '13', NORMAL_RANGE_HIGH: '17', GENDER: 'Male', AGE_MIN: '18', AGE_MAX: '60', AGE_UNIT: 'Years', RANGE_LOW: '13', RANGE_HIGH: '17',
       },
       {
-        TEST_CODE: 'CBC001', TEST_NAME: 'Complete Blood Count', PARAMETER_NAME: 'Hemoglobin', UNIT: 'g/dL', METHOD: 'Photometry',
+        TEST_CODE: 'CBC001', TEST_NAME: 'Complete Blood Count', TEST_CATEGORY: 'Haematology', SAMPLE_TYPE: 'Blood',
+        PARAMETER_NAME: 'Hemoglobin', UNIT: 'g/dL', METHOD: 'Photometry',
         NORMAL_RANGE_LOW: '13', NORMAL_RANGE_HIGH: '17', GENDER: 'Female', AGE_MIN: '18', AGE_MAX: '60', AGE_UNIT: 'Years', RANGE_LOW: '12', RANGE_HIGH: '15',
       },
     );
@@ -265,9 +275,12 @@ async function downloadTemplate(req, res) {
 
 /**
  * Parses an uploaded Excel/CSV and validates each row, without writing
- * anything yet. Columns: TEST_CODE, TEST_NAME, PARAMETER_NAME, UNIT, METHOD,
- * NORMAL_RANGE_LOW, NORMAL_RANGE_HIGH, GENDER, AGE_MIN, AGE_MAX, AGE_UNIT,
- * RANGE_LOW, RANGE_HIGH. A row with no PARAMETER_NAME just ensures the test
+ * anything yet. Columns: TEST_CODE, TEST_NAME, TEST_CATEGORY, SAMPLE_TYPE,
+ * PARAMETER_NAME, UNIT, METHOD, NORMAL_RANGE_LOW, NORMAL_RANGE_HIGH, GENDER,
+ * AGE_MIN, AGE_MAX, AGE_UNIT, RANGE_LOW, RANGE_HIGH. TEST_CATEGORY/SAMPLE_TYPE
+ * only take effect the first time a TEST_CODE is created - they're test-level,
+ * not per-row, so they're ignored on a row for a test that already exists.
+ * A row with no PARAMETER_NAME just ensures the test
  * exists. A row whose RANGE_LOW/RANGE_HIGH are filled in adds an age/gender-
  * specific rule to that parameter (multiple rows can target the same
  * TEST_CODE+PARAMETER_NAME to add several rules). Step 1 of Preview ->
@@ -288,6 +301,8 @@ async function previewUpload(req, res) {
   const preview = rows.map((r, idx) => {
     const testCode = String(r.TEST_CODE || '').trim();
     const testName = String(r.TEST_NAME || '').trim();
+    const testCategory = String(r.TEST_CATEGORY || '').trim();
+    const sampleType = String(r.SAMPLE_TYPE || '').trim();
     const parameterName = String(r.PARAMETER_NAME || '').trim();
     const unit = String(r.UNIT || '').trim();
     const method = String(r.METHOD || '').trim();
@@ -324,7 +339,7 @@ async function previewUpload(req, res) {
 
     return {
       row: idx + 2, // account for header row
-      testCode, testName, parameterName, unit, method, normalRangeLow, normalRangeHigh,
+      testCode, testName, testCategory, sampleType, parameterName, unit, method, normalRangeLow, normalRangeHigh,
       gender, ageMin, ageMax, ageUnit, rangeLow, rangeHigh,
       isNewTest,
       action,
@@ -358,7 +373,10 @@ async function commitUpload(req, res) {
       continue;
     }
 
-    const [test, testCreated] = await TestMaster.findOrCreate({ where: { testCode }, defaults: { testName } });
+    const [test, testCreated] = await TestMaster.findOrCreate({
+      where: { testCode },
+      defaults: { testName, category: row.testCategory || null, sampleType: row.sampleType || null },
+    });
     if (testCreated) results.testsCreated += 1;
 
     const parameterName = String(row.parameterName || '').trim();
