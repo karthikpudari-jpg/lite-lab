@@ -293,8 +293,16 @@ export default function Masters() {
               <label><span>Test Name</span>
                 <input value={testForm.testName} onChange={(e) => setTestForm((f) => ({ ...f, testName: e.target.value }))} required />
               </label>
-              <label><span>Category</span>
-                <input value={testForm.category} onChange={(e) => setTestForm((f) => ({ ...f, category: e.target.value }))} placeholder="e.g. Haematology" />
+              <label><span>Test Group</span>
+                <input
+                  value={testForm.category}
+                  onChange={(e) => setTestForm((f) => ({ ...f, category: e.target.value }))}
+                  placeholder="Pick an existing group or type a new one"
+                  list="test-group-options"
+                />
+                <datalist id="test-group-options">
+                  {categories.map((c) => <option key={c} value={c} />)}
+                </datalist>
               </label>
               <label><span>Sample Type</span>
                 <input value={testForm.sampleType} onChange={(e) => setTestForm((f) => ({ ...f, sampleType: e.target.value }))} placeholder="e.g. Blood" />
