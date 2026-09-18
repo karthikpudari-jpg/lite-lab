@@ -16,6 +16,7 @@ router.use(authenticate, requireChiefAdmin);
 router.post('/', clientCtrl.createClient);
 router.get('/', clientCtrl.listClients);
 router.get('/marketing-persons', clientCtrl.listMarketingPersons);
+router.get('/next-code', clientCtrl.previewNextClientCode);
 router.get('/:id', clientCtrl.getClient);
 router.put('/:id', clientCtrl.updateClient);
 

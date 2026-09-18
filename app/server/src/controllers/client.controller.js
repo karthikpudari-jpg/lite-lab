@@ -260,7 +260,17 @@ async function listMarketingPersons(req, res) {
   return res.json(users.map((u) => ({ id: u.id, username: u.username, name: u.name })));
 }
 
+// GET /api/clients/next-code  - lets the Create Client form show the code it
+// will get before the client actually exists. Just a preview, not a
+// reservation: the real one is (re)computed at creation time, so this can go
+// briefly stale if another client is created in between, without causing a
+// collision - createClient always generates its own code independently.
+async function previewNextClientCode(req, res) {
+  const clientCode = await generateClientCode('CHIEF_ADMIN');
+  return res.json({ clientCode });
+}
+
 module.exports = {
   createClient, listClients, getClient, updateClient, listMarketingPersons, createInitialSubscription, currentMonthRange,
-  generateClientCode,
+  generateClientCode, previewNextClientCode,
 };

@@ -25,10 +25,12 @@ export default function ClientCreate() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [marketingPersons, setMarketingPersons] = useState([]);
+  const [nextClientCode, setNextClientCode] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
     api.get('/clients/marketing-persons').then((r) => setMarketingPersons(r.data));
+    api.get('/clients/next-code').then((r) => setNextClientCode(r.data.clientCode));
   }, []);
 
   function update(field, value) { setForm((f) => ({ ...f, [field]: value })); }
@@ -109,6 +111,9 @@ export default function ClientCreate() {
       <h3>Create Client</h3>
       <form onSubmit={handleSubmit}>
         <div className="form-grid">
+          <label><span>Client Code</span>
+            <input value={nextClientCode || 'Generating…'} disabled />
+          </label>
           <label><span>Client Name</span><input value={form.clientName} onChange={(e) => update('clientName', e.target.value)} required /></label>
           <label><span>Mobile</span><input value={form.mobile} onChange={(e) => update('mobile', e.target.value)} /></label>
           <label><span>Email</span><input value={form.email} onChange={(e) => update('email', e.target.value)} /></label>
