@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import api from '../../api/client';
 import RoleCheckboxes from '../../components/RoleCheckboxes';
 import SearchSelect from '../../components/SearchSelect';
+import { SCREEN_CATALOG } from '../../components/Layout';
 import { calculatePlanAmount } from '../../utils/pricing';
 
 export default function ClientDetail() {
@@ -20,14 +21,27 @@ export default function ClientDetail() {
   const [saveMessage, setSaveMessage] = useState('');
   const [error, setError] = useState('');
 
+  // Role -> screen access for this client's own staff - `defaults` is the
+  // platform-wide ceiling (read-only here, set on Role Screen Defaults),
+  // `effective` is this client's own override, editable and saved per role.
+  const [roleScreenRoles, setRoleScreenRoles] = useState([]);
+  const [roleScreenDefaults, setRoleScreenDefaults] = useState({});
+  const [roleScreenEffective, setRoleScreenEffective] = useState({});
+  const [roleScreenMessage, setRoleScreenMessage] = useState('');
+  const [roleScreenError, setRoleScreenError] = useState('');
+
   async function load() {
-    const [clientRes, testsRes, pricesRes, marketingRes] = await Promise.all([
+    const [clientRes, testsRes, pricesRes, marketingRes, roleScreensRes] = await Promise.all([
       api.get(`/clients/${id}`),
       api.get('/admin/masters/tests'),
       api.get(`/clients/${id}/test-prices`),
       api.get('/clients/marketing-persons'),
+      api.get(`/clients/${id}/role-screens`),
     ]);
     setMarketingPersons(marketingRes.data);
+    setRoleScreenRoles(roleScreensRes.data.roles);
+    setRoleScreenDefaults(roleScreensRes.data.defaults);
+    setRoleScreenEffective(roleScreensRes.data.effective);
     setClient(clientRes.data);
     setForm({
       clientName: clientRes.data.clientName,
@@ -95,6 +109,25 @@ export default function ClientDetail() {
       load();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to update roles');
+    }
+  }
+
+  function toggleRoleScreen(role, key) {
+    setRoleScreenEffective((d) => {
+      const current = d[role] || [];
+      const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
+      return { ...d, [role]: next };
+    });
+  }
+
+  async function handleSaveRoleScreens(role) {
+    setRoleScreenError('');
+    setRoleScreenMessage('');
+    try {
+      await api.put(`/clients/${id}/role-screens`, { role, screens: roleScreenEffective[role] || [] });
+      setRoleScreenMessage(`Screen access for ${role} saved.`);
+    } catch (err) {
+      setRoleScreenError(err.response?.data?.message || 'Failed to save');
     }
   }
 
@@ -207,6 +240,51 @@ export default function ClientDetail() {
               </tr>
             ))}
             {users.length === 0 && <tr><td colSpan={5}>No users yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card">
+        <h3>Role → Screen Access</h3>
+        <p style={{ fontSize: 13, color: '#64748b' }}>
+          Which screens this client's own FRONT_OFFICE / LAB_USER / MANAGER / MASTER_MANAGER staff can see. This can
+          only narrow the platform-wide default (set on Role Screen Defaults) - greyed-out screens aren't part of the
+          platform default for that role. The client's own ADMIN can narrow this further themselves later; ADMIN
+          itself always has full access and isn't listed.
+        </p>
+        {roleScreenError && <p className="error-text">{roleScreenError}</p>}
+        {roleScreenMessage && <p style={{ color: '#166534' }}>{roleScreenMessage}</p>}
+        <table>
+          <thead>
+            <tr>
+              <th>Role</th>
+              {SCREEN_CATALOG.map((s) => <th key={s.key}>{s.label}</th>)}
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {roleScreenRoles.map((role) => (
+              <tr key={role}>
+                <td><strong>{role}</strong></td>
+                {SCREEN_CATALOG.map((s) => {
+                  const allowed = (roleScreenDefaults[role] || []).includes(s.key);
+                  return (
+                    <td key={s.key}>
+                      <input
+                        type="checkbox"
+                        style={{ width: 'auto' }}
+                        disabled={!allowed}
+                        checked={allowed && (roleScreenEffective[role] || []).includes(s.key)}
+                        onChange={() => toggleRoleScreen(role, s.key)}
+                        title={allowed ? '' : 'Not included in the platform default for this role'}
+                      />
+                    </td>
+                  );
+                })}
+                <td><button type="button" onClick={() => handleSaveRoleScreens(role)}>Save</button></td>
+              </tr>
+            ))}
+            {roleScreenRoles.length === 0 && <tr><td colSpan={SCREEN_CATALOG.length + 2}>Loading…</td></tr>}
           </tbody>
         </table>
       </div>

@@ -87,6 +87,36 @@ async function getEffectiveRoleScreens(req, res) {
   return res.json(computeEffective(defaults, overrides));
 }
 
+// GET /api/clients/:clientId/role-screens  (Chief Admin, ADMIN only - same override
+// a client's own ADMIN sets via /role-screens, but settable by Chief Admin for any client).
+async function getClientRoleScreensForAdmin(req, res) {
+  const clientId = Number(req.params.clientId);
+  const [defaults, overrides] = await Promise.all([getDefaultsMap(), getOverrideMap(clientId)]);
+  const effective = computeEffective(defaults, overrides);
+  return res.json({ roles: CONFIGURABLE_ROLES, screens: ALL_SCREEN_KEYS, defaults, effective });
+}
+
+// PUT /api/clients/:clientId/role-screens  { role, screens: [...] }
+async function updateClientRoleScreensForAdmin(req, res) {
+  const clientId = Number(req.params.clientId);
+  const { role, screens } = req.body;
+  if (!CONFIGURABLE_ROLES.includes(role)) {
+    return res.status(400).json({ message: 'Unknown or non-configurable role' });
+  }
+  const screenList = Array.isArray(screens) ? screens : [];
+  const defaults = await getDefaultsMap();
+  const allowed = new Set(defaults[role] || []);
+  const invalid = screenList.filter((s) => !allowed.has(s));
+  if (invalid.length) {
+    return res.status(400).json({ message: `Not part of the platform default for this role: ${invalid.join(', ')}` });
+  }
+
+  const [row] = await ClientRoleScreen.findOrCreate({ where: { clientId, role }, defaults: { screens: screenList } });
+  if (JSON.stringify(row.screens) !== JSON.stringify(screenList)) await row.update({ screens: screenList });
+  return res.json({ role, screens: screenList });
+}
+
 module.exports = {
   getRoleScreenDefaults, updateRoleScreenDefault, getClientRoleScreens, updateClientRoleScreens, getEffectiveRoleScreens,
+  getClientRoleScreensForAdmin, updateClientRoleScreensForAdmin,
 };
