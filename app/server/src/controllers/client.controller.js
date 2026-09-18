@@ -3,14 +3,30 @@ const { Client, ClientSubscription, ClientUser, Role, ChiefAdmin, sequelize } = 
 const { Op } = require('sequelize');
 const { calculatePlanAmount } = require('../utils/pricing');
 
-/** Generates the next available Client Code, e.g. CLI0001, retrying past any collision. */
-async function generateClientCode() {
-  const count = await Client.count();
-  let n = count + 1;
-  let code = `CLI${String(n).padStart(4, '0')}`;
+/**
+ * Generates the next available Client Code, e.g. CLI0001-SU or CLI0002-CA.
+ * Both client-creation paths (self-signup and Chief-Admin-created) share one
+ * sequence number - the suffix just marks which one created it, it doesn't
+ * split them into two separate counters.
+ */
+async function generateClientCode(source) {
+  const suffix = source === 'CHIEF_ADMIN' ? 'CA' : 'SU';
+
+  // The shared sequence number is the highest one already in use across every
+  // existing client code, regardless of its suffix - not a row count, which
+  // would collide with a manually-typed code from before this suffix scheme.
+  const clients = await Client.findAll({ attributes: ['clientCode'] });
+  let maxN = 0;
+  for (const c of clients) {
+    const match = c.clientCode.match(/(\d+)/);
+    if (match) maxN = Math.max(maxN, parseInt(match[1], 10));
+  }
+
+  let n = maxN + 1;
+  let code = `CLI${String(n).padStart(4, '0')}-${suffix}`;
   while (await Client.findOne({ where: { clientCode: code } })) {
     n += 1;
-    code = `CLI${String(n).padStart(4, '0')}`;
+    code = `CLI${String(n).padStart(4, '0')}-${suffix}`;
   }
   return code;
 }
@@ -52,28 +68,29 @@ async function createInitialSubscription(client, t, range) {
 }
 
 // POST /api/clients  (Chief Admin)
-// Body: { clientCode, clientName, ..., startDate, endDate, users: [{ username, password, name, roleName }] }
+// Body: { clientName, ..., startDate, endDate, users: [{ username, password, name, roleName }] }
+// The Client Code is always generated here, never chosen by the caller - see
+// generateClientCode's -CA suffix, shared sequence with self-signup's -SU.
 // monthlyAmount defaults to the plan (₹2000/month covers 2 users, +₹500/month
 // for each user beyond that) plus marketingPersonPrice, but Chief Admin can
 // override it with an explicit monthlyAmount in the request (e.g. a custom
 // negotiated rate) - if given, that figure is used as-is instead.
 async function createClient(req, res) {
   const {
-    clientCode, clientName, mobile, email, address, salesPerson, marketingPersonPrice, monthlyAmount: monthlyAmountOverride,
+    clientName, mobile, email, address, salesPerson, marketingPersonPrice, monthlyAmount: monthlyAmountOverride,
     startDate, endDate, users,
   } = req.body;
 
-  if (!clientCode || !clientName || !startDate || !endDate) {
+  if (!clientName || !startDate || !endDate) {
     return res.status(400).json({
-      message: 'clientCode, clientName, startDate and endDate are required',
+      message: 'clientName, startDate and endDate are required',
     });
   }
   if (new Date(endDate) < new Date(startDate)) {
     return res.status(400).json({ message: 'endDate cannot be before startDate' });
   }
 
-  const existing = await Client.findOne({ where: { clientCode } });
-  if (existing) return res.status(409).json({ message: 'Client Code already exists' });
+  const clientCode = await generateClientCode('CHIEF_ADMIN');
 
   const userList = Array.isArray(users) ? users : [];
   for (const u of userList) {

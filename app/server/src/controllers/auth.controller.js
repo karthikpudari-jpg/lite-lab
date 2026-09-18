@@ -106,7 +106,7 @@ async function selfRegister(req, res) {
     return res.status(400).json({ message: 'Provide at least an email or a WhatsApp/mobile number so we can send your login details' });
   }
 
-  const clientCode = await generateClientCode();
+  const clientCode = await generateClientCode('SELF_SIGNUP');
   const adminRole = await Role.findOne({ where: { name: 'ADMIN' } });
   // A self-signup starts with just its one owner/admin account - the basic
   // plan (up to 2 users) applies, same as any other client.

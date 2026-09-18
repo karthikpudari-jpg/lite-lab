@@ -15,7 +15,7 @@ function todayISO() {
 
 export default function ClientCreate() {
   const [form, setForm] = useState({
-    clientCode: '', clientName: '', mobile: '', email: '', address: '', salesPerson: '', marketingPersonPrice: '0',
+    clientName: '', mobile: '', email: '', address: '', salesPerson: '', marketingPersonPrice: '0',
     startDate: todayISO(), endDate: '',
   });
   const [userCount, setUserCount] = useState(1);
@@ -109,7 +109,6 @@ export default function ClientCreate() {
       <h3>Create Client</h3>
       <form onSubmit={handleSubmit}>
         <div className="form-grid">
-          <label><span>Client Code</span><input value={form.clientCode} onChange={(e) => update('clientCode', e.target.value)} required /></label>
           <label><span>Client Name</span><input value={form.clientName} onChange={(e) => update('clientName', e.target.value)} required /></label>
           <label><span>Mobile</span><input value={form.mobile} onChange={(e) => update('mobile', e.target.value)} /></label>
           <label><span>Email</span><input value={form.email} onChange={(e) => update('email', e.target.value)} /></label>
