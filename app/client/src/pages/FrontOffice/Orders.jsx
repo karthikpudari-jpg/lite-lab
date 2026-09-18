@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -56,6 +56,16 @@ export default function Orders() {
     const matchesTo = !toDate || b.walkInDate <= toDate;
     return matchesSearch && matchesFrom && matchesTo;
   });
+
+  // Every test on every currently-visible bill, counted by its own status - not
+  // just the bill's - since one bill can carry tests at different stages.
+  const testCounts = useMemo(() => {
+    const tests = filtered.flatMap((b) => b.tests);
+    const total = tests.length;
+    const cancelled = tests.filter((t) => t.itemStatus === 'CANCELLED').length;
+    const done = tests.filter((t) => t.status === 'RELEASED' && t.itemStatus !== 'CANCELLED').length;
+    return { total, cancelled, done, pending: total - done - cancelled };
+  }, [filtered]);
 
   async function toggleSetting(key, label) {
     setSettingsSaving(true);
@@ -153,6 +163,12 @@ export default function Orders() {
     <div className="card">
       <div className="topbar">
         <h3 style={{ margin: 0 }}>Orders</h3>
+        <div className="status-summary">
+          <div className="stat-chip"><span className="stat-value">{testCounts.total}</span><span className="stat-label">Total</span></div>
+          <div className="stat-chip pending"><span className="stat-value">{testCounts.pending}</span><span className="stat-label">Pending</span></div>
+          <div className="stat-chip done"><span className="stat-value">{testCounts.done}</span><span className="stat-label">Done</span></div>
+          <div className="stat-chip cancelled"><span className="stat-value">{testCounts.cancelled}</span><span className="stat-label">Cancel</span></div>
+        </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}>
             From <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />

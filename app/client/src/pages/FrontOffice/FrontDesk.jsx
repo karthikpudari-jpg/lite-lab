@@ -39,6 +39,8 @@ export default function FrontDesk() {
   const [billingType, setBillingType] = useState('DIRECT'); // DIRECT | PAYOR | REFERRAL
   const [doctorName, setDoctorName] = useState('');
   const [walkInDate, setWalkInDate] = useState(todayISO());
+  const [visitType, setVisitType] = useState('WALK-IN');
+  const [priority, setPriority] = useState('ROUTINE');
   const [discount, setDiscount] = useState('0');
   const [paymentMode, setPaymentMode] = useState('');
   const [visitAddress, setVisitAddress] = useState('');
@@ -87,7 +89,7 @@ export default function FrontDesk() {
     try {
       const { data } = await api.get('/patients/lookup', { params });
       setPatient(data);
-      setPatientForm({ name: data.name, age: data.age || '', gender: data.gender || 'Male', mobile: data.mobile || '', email: data.email || '', address: data.address || '' });
+      setPatientForm({ name: data.name, age: data.age || '', ageUnit: data.ageUnit || 'Years', gender: data.gender || 'Male', mobile: data.mobile || '', email: data.email || '', address: data.address || '' });
       setVisitAddress(data.address || '');
       setSearchMessage(`Existing patient found — ${data.umr}`);
     } catch (err) {
@@ -154,6 +156,8 @@ export default function FrontDesk() {
         testIds: selectedTests,
         referredDoctorName: doctorName || undefined,
         walkInDate,
+        visitType,
+        priority,
         discount: Number(discount) || 0,
         paymentMode: isCredit ? undefined : paymentMode,
         visitAddress,
@@ -303,7 +307,12 @@ export default function FrontDesk() {
             </select>
           </label>
           <label><span>Age</span>
-            <input type="number" value={patientForm.age} onChange={(e) => setPatientForm((f) => ({ ...f, age: e.target.value }))} disabled={!!patient} />
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input type="number" min="0" style={{ flex: 1 }} value={patientForm.age} onChange={(e) => setPatientForm((f) => ({ ...f, age: e.target.value }))} disabled={!!patient} />
+              <select style={{ flex: 1 }} value={patientForm.ageUnit} onChange={(e) => setPatientForm((f) => ({ ...f, ageUnit: e.target.value }))} disabled={!!patient}>
+                <option>Years</option><option>Months</option><option>Days</option>
+              </select>
+            </div>
           </label>
           <label><span>Email (optional)</span>
             <input value={patientForm.email} onChange={(e) => setPatientForm((f) => ({ ...f, email: e.target.value }))} disabled={!!patient} />
@@ -311,6 +320,19 @@ export default function FrontDesk() {
           {patient && <label><span>UMR No</span><input value={patient.umr} disabled /></label>}
           <label><span>Walk-in On</span>
             <input type="date" value={walkInDate} onChange={(e) => setWalkInDate(e.target.value)} />
+          </label>
+          <label><span>Visit Type</span>
+            <select value={visitType} onChange={(e) => setVisitType(e.target.value)}>
+              <option value="WALK-IN">Walk-in</option>
+              <option value="OPD">OPD</option>
+              <option value="IPD">IPD</option>
+            </select>
+          </label>
+          <label><span>Priority</span>
+            <select value={priority} onChange={(e) => setPriority(e.target.value)}>
+              <option value="ROUTINE">Routine</option>
+              <option value="URGENT">Urgent</option>
+            </select>
           </label>
         </div>
       </div>

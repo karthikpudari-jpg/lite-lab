@@ -4,20 +4,26 @@ import SearchSelect from '../../components/SearchSelect';
 import { downloadFile } from '../../utils/download';
 
 const GENDER_OPTIONS = ['Any', 'Male', 'Female', 'Other'];
-const emptyRangeRow = () => ({ gender: 'Any', ageMin: '', ageMax: '', normalRangeLow: '', normalRangeHigh: '' });
+const AGE_UNIT_OPTIONS = ['Years', 'Months', 'Days'];
+const emptyRangeRow = () => ({ gender: 'Any', ageMin: '', ageMax: '', ageUnit: 'Years', normalRangeLow: '', normalRangeHigh: '' });
+// Narrower than the app-wide .form-grid default (minmax 200px) so Gender/Age/Unit/Range fields
+// wrap two-three to a row instead of stacking one-per-row on a narrow/mobile screen.
+const rangeGridStyle = { alignItems: 'end', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))' };
 
 export default function TestParameters() {
   const [tests, setTests] = useState([]);
   const [shortNames, setShortNames] = useState([]);
   const [selectedTestId, setSelectedTestId] = useState('');
-  const [paramForm, setParamForm] = useState({ parameterName: '', unit: '', normalRangeLow: '', normalRangeHigh: '' });
+  const [paramForm, setParamForm] = useState({ parameterName: '', unit: '', method: '', normalRangeLow: '', normalRangeHigh: '' });
   const [rangeRows, setRangeRows] = useState([]); // extra age/gender-specific rules for the parameter being created
   const [paramError, setParamError] = useState('');
+  const [savingParam, setSavingParam] = useState(false);
   const [shortNameForm, setShortNameForm] = useState({ testId: '', shortName: '' });
 
   const [manageParam, setManageParam] = useState(null); // parameter row whose ranges are being managed
   const [newRange, setNewRange] = useState(emptyRangeRow());
   const [rangeError, setRangeError] = useState('');
+  const [savingRange, setSavingRange] = useState(false);
 
   const [bulkPreview, setBulkPreview] = useState(null);
   const [bulkFile, setBulkFile] = useState(null);
@@ -38,16 +44,20 @@ export default function TestParameters() {
 
   async function handleAddParameter(e) {
     e.preventDefault();
+    if (savingParam) return; // guard against rapid double-submit creating a duplicate parameter
     setParamError('');
     if (!selectedTestId) { setParamError('Pick a test first.'); return; }
     const normalRanges = rangeRows.filter((r) => r.normalRangeLow || r.normalRangeHigh);
+    setSavingParam(true);
     try {
       await api.post(`/test-config/tests/${selectedTestId}/parameters`, { ...paramForm, normalRanges });
-      setParamForm({ parameterName: '', unit: '', normalRangeLow: '', normalRangeHigh: '' });
+      setParamForm({ parameterName: '', unit: '', method: '', normalRangeLow: '', normalRangeHigh: '' });
       setRangeRows([]);
       loadAll();
     } catch (err) {
       setParamError(err.response?.data?.message || 'Failed to add parameter');
+    } finally {
+      setSavingParam(false);
     }
   }
 
@@ -69,7 +79,9 @@ export default function TestParameters() {
 
   async function handleAddExistingRange(e) {
     e.preventDefault();
+    if (savingRange) return; // guard against rapid double-submit creating a duplicate range rule
     setRangeError('');
+    setSavingRange(true);
     try {
       await api.post(`/test-config/parameters/${manageParam.id}/ranges`, newRange);
       setNewRange(emptyRangeRow());
@@ -78,6 +90,8 @@ export default function TestParameters() {
       setManageParam((prev) => freshTest?.ParameterMasters?.find((p) => p.id === prev.id) || prev);
     } catch (err) {
       setRangeError(err.response?.data?.message || 'Failed to add normal range');
+    } finally {
+      setSavingRange(false);
     }
   }
 
@@ -146,13 +160,16 @@ export default function TestParameters() {
               <label><span>Unit</span>
                 <input value={paramForm.unit} onChange={(e) => setParamForm((f) => ({ ...f, unit: e.target.value }))} />
               </label>
+              <label><span>Method</span>
+                <input value={paramForm.method} onChange={(e) => setParamForm((f) => ({ ...f, method: e.target.value }))} placeholder="e.g. Photometry" />
+              </label>
               <label><span>Default Normal Range Low</span>
                 <input value={paramForm.normalRangeLow} onChange={(e) => setParamForm((f) => ({ ...f, normalRangeLow: e.target.value }))} />
               </label>
               <label><span>Default Normal Range High</span>
                 <input value={paramForm.normalRangeHigh} onChange={(e) => setParamForm((f) => ({ ...f, normalRangeHigh: e.target.value }))} />
               </label>
-              <button type="submit">Add Parameter</button>
+              <button type="submit" disabled={savingParam}>{savingParam ? 'Adding…' : 'Add Parameter'}</button>
             </form>
 
             <div style={{ marginTop: 10 }}>
@@ -161,7 +178,7 @@ export default function TestParameters() {
                 whenever a patient doesn't match any of these.
               </p>
               {rangeRows.map((r, idx) => (
-                <div key={idx} className="form-grid" style={{ alignItems: 'end', marginBottom: 6 }}>
+                <div key={idx} className="form-grid" style={rangeGridStyle}>
                   <label><span>Gender</span>
                     <select value={r.gender} onChange={(e) => updateRangeRow(idx, 'gender', e.target.value)}>
                       {GENDER_OPTIONS.map((g) => <option key={g}>{g}</option>)}
@@ -172,6 +189,11 @@ export default function TestParameters() {
                   </label>
                   <label><span>Age To</span>
                     <input type="number" min="0" value={r.ageMax} onChange={(e) => updateRangeRow(idx, 'ageMax', e.target.value)} />
+                  </label>
+                  <label><span>Age Unit</span>
+                    <select value={r.ageUnit} onChange={(e) => updateRangeRow(idx, 'ageUnit', e.target.value)}>
+                      {AGE_UNIT_OPTIONS.map((u) => <option key={u}>{u}</option>)}
+                    </select>
                   </label>
                   <label><span>Range Low</span>
                     <input value={r.normalRangeLow} onChange={(e) => updateRangeRow(idx, 'normalRangeLow', e.target.value)} />
@@ -187,20 +209,21 @@ export default function TestParameters() {
 
             {paramError && <p className="error-text">{paramError}</p>}
             <table style={{ marginTop: 14 }}>
-              <thead><tr><th>Code</th><th>Parameter</th><th>Unit</th><th>Default Range</th><th>Age/Gender Ranges</th><th>Source</th><th></th></tr></thead>
+              <thead><tr><th>Code</th><th>Parameter</th><th>Unit</th><th>Method</th><th>Default Range</th><th>Age/Gender Ranges</th><th>Source</th><th></th></tr></thead>
               <tbody>
                 {(selectedTest?.ParameterMasters || []).map((p) => (
                   <tr key={p.id}>
                     <td>{p.parameterCode || '—'}</td>
                     <td>{p.parameterName}</td>
                     <td>{p.unit || '—'}</td>
+                    <td>{p.method || '—'}</td>
                     <td>{p.normalRangeLow || '—'} - {p.normalRangeHigh || '—'}</td>
                     <td>{(p.ParameterNormalRanges || []).length}</td>
                     <td>{p.clientId ? <span className="badge PENDING_COLLECTION">Your Parameter</span> : <span className="badge PAID">Universal</span>}</td>
                     <td><button type="button" onClick={() => openManageRanges(p)}>Manage Ranges</button></td>
                   </tr>
                 ))}
-                {(selectedTest?.ParameterMasters || []).length === 0 && <tr><td colSpan={7}>No parameters yet for this test.</td></tr>}
+                {(selectedTest?.ParameterMasters || []).length === 0 && <tr><td colSpan={8}>No parameters yet for this test.</td></tr>}
               </tbody>
             </table>
           </>
@@ -209,28 +232,29 @@ export default function TestParameters() {
 
       {manageParam && (
         <div className="modal-overlay" onClick={() => setManageParam(null)}>
-          <div className="modal-card" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal-card" style={{ width: 680, maxWidth: 'calc(100vw - 32px)', textAlign: 'left' }} onClick={(e) => e.stopPropagation()}>
             <h2>Normal Ranges — {manageParam.parameterName}</h2>
             <p style={{ fontSize: 13, color: '#64748b' }}>
               Default range: {manageParam.normalRangeLow || '—'} - {manageParam.normalRangeHigh || '—'} (used when no rule below matches).
             </p>
             <table>
-              <thead><tr><th>Gender</th><th>Age From</th><th>Age To</th><th>Range</th><th></th></tr></thead>
+              <thead><tr><th>Gender</th><th>Age From</th><th>Age To</th><th>Unit</th><th>Range</th><th></th></tr></thead>
               <tbody>
                 {(manageParam.ParameterNormalRanges || []).map((r) => (
                   <tr key={r.id}>
                     <td>{r.gender}</td>
                     <td>{r.ageMin ?? '—'}</td>
                     <td>{r.ageMax ?? '—'}</td>
+                    <td>{r.ageUnit || 'Years'}</td>
                     <td>{r.normalRangeLow || '—'} - {r.normalRangeHigh || '—'}</td>
                     <td><button type="button" className="secondary" onClick={() => handleDeleteRange(r.id)}>Remove</button></td>
                   </tr>
                 ))}
-                {(manageParam.ParameterNormalRanges || []).length === 0 && <tr><td colSpan={5}>No age/gender rules yet — the default range applies to everyone.</td></tr>}
+                {(manageParam.ParameterNormalRanges || []).length === 0 && <tr><td colSpan={6}>No age/gender rules yet — the default range applies to everyone.</td></tr>}
               </tbody>
             </table>
 
-            <form onSubmit={handleAddExistingRange} className="form-grid" style={{ alignItems: 'end', marginTop: 12 }}>
+            <form onSubmit={handleAddExistingRange} className="form-grid" style={{ ...rangeGridStyle, marginTop: 12 }}>
               <label><span>Gender</span>
                 <select value={newRange.gender} onChange={(e) => setNewRange((f) => ({ ...f, gender: e.target.value }))}>
                   {GENDER_OPTIONS.map((g) => <option key={g}>{g}</option>)}
@@ -242,13 +266,18 @@ export default function TestParameters() {
               <label><span>Age To</span>
                 <input type="number" min="0" value={newRange.ageMax} onChange={(e) => setNewRange((f) => ({ ...f, ageMax: e.target.value }))} />
               </label>
+              <label><span>Age Unit</span>
+                <select value={newRange.ageUnit} onChange={(e) => setNewRange((f) => ({ ...f, ageUnit: e.target.value }))}>
+                  {AGE_UNIT_OPTIONS.map((u) => <option key={u}>{u}</option>)}
+                </select>
+              </label>
               <label><span>Range Low</span>
                 <input value={newRange.normalRangeLow} onChange={(e) => setNewRange((f) => ({ ...f, normalRangeLow: e.target.value }))} />
               </label>
               <label><span>Range High</span>
                 <input value={newRange.normalRangeHigh} onChange={(e) => setNewRange((f) => ({ ...f, normalRangeHigh: e.target.value }))} />
               </label>
-              <button type="submit">Add Range</button>
+              <button type="submit" disabled={savingRange}>{savingRange ? 'Adding…' : 'Add Range'}</button>
             </form>
             {rangeError && <p className="error-text">{rangeError}</p>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>

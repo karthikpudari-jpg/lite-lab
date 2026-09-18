@@ -55,12 +55,13 @@ async function withResolvedRanges(sampleJson) {
   const patient = sampleJson.BillItem?.Bill?.Patient;
   const age = patient?.age;
   const gender = patient?.gender;
+  const ageUnit = patient?.ageUnit;
 
   const params = sampleJson.BillItem?.TestMaster?.ParameterMasters;
   if (Array.isArray(params) && params.length > 0) {
     await attachNormalRanges(params);
     for (const p of params) {
-      const resolved = resolveNormalRange(p, age, gender);
+      const resolved = resolveNormalRange(p, age, gender, ageUnit);
       p.normalRangeLow = resolved.normalRangeLow;
       p.normalRangeHigh = resolved.normalRangeHigh;
     }
@@ -135,7 +136,7 @@ async function enterResults(req, res) {
   for (const r of results) {
     const parameter = await ParameterMaster.findByPk(r.parameterId, { include: [ParameterNormalRange] });
     if (!parameter) continue;
-    const range = resolveNormalRange(parameter, patient?.age, patient?.gender);
+    const range = resolveNormalRange(parameter, patient?.age, patient?.gender, patient?.ageUnit);
     const isAbnormal = isOutOfRange(r.value, range.normalRangeLow, range.normalRangeHigh);
 
     const [record] = await Result.findOrCreate({
@@ -204,6 +205,7 @@ async function getBillReport(req, res) {
 
   const age = bill.Patient?.age;
   const gender = bill.Patient?.gender;
+  const ageUnit = bill.Patient?.ageUnit;
   await attachNormalRanges(releasedSamples.flatMap((s) => s.Results.map((r) => r.ParameterMaster)));
 
   return res.json({
@@ -228,7 +230,7 @@ async function getBillReport(req, res) {
       collectedAt: s.collectedAt,
       releasedAt: s.Report.releasedAt,
       parameters: s.Results.map((r) => {
-        const range = resolveNormalRange(r.ParameterMaster, age, gender);
+        const range = resolveNormalRange(r.ParameterMaster, age, gender, ageUnit);
         return {
           parameterCode: r.ParameterMaster.parameterCode,
           parameterName: r.ParameterMaster.parameterName,
@@ -292,7 +294,7 @@ async function getBillTrendReport(req, res) {
     for (const result of sample.Results) {
       const param = result.ParameterMaster;
       const history = await getPatientParameterHistory(clientId, bill.patientId, param.id);
-      const range = resolveNormalRange(param, bill.Patient?.age, bill.Patient?.gender);
+      const range = resolveNormalRange(param, bill.Patient?.age, bill.Patient?.gender, bill.Patient?.ageUnit);
       parameters.push({
         testName: sample.BillItem.TestMaster.testName,
         parameterCode: param.parameterCode,

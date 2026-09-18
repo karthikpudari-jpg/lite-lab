@@ -18,6 +18,9 @@ const PATHS = {
   plug: 'M9 2v4M15 2v4M6 8h12l-1 4a5 5 0 0 1-10 0zM8 16v2a4 4 0 0 0 8 0v-2',
   lock: 'M6 11V7a6 6 0 0 1 12 0v4M5 11h14v10H5zM12 15v3',
   logout: 'M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3',
+  user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0',
+  print: 'M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-2M6 14h12v7H6z',
+  sparkle: 'M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8z',
 };
 
 export function Icon({ name, size = 20, ...rest }) {

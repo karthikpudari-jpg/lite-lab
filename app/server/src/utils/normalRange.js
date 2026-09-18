@@ -8,19 +8,32 @@
  */
 const GENDER_ALIASES = { m: 'male', f: 'female', o: 'other' };
 
+// A patient's age and a rule's age band can each be given in a different unit
+// (e.g. a newborn's age in days against a "0-7 days" rule, while an adult's
+// age in years matches an "18-60 years" rule) - both sides are converted to
+// days, an approximation good enough for age-band matching, before comparing.
+const DAYS_PER_UNIT = { Days: 1, Months: 30, Years: 365 };
+
+function toDays(value, unit) {
+  if (value == null || value === '') return null;
+  return Number(value) * (DAYS_PER_UNIT[unit] || DAYS_PER_UNIT.Years);
+}
+
 function normalizeGender(gender) {
   const g = (gender || '').trim().toLowerCase();
   return GENDER_ALIASES[g] || g;
 }
 
-function resolveNormalRange(parameter, age, gender) {
+function resolveNormalRange(parameter, age, gender, ageUnit) {
   const rules = parameter.ParameterNormalRanges || [];
   const normalizedGender = normalizeGender(gender);
-  const ageValue = age == null || age === '' ? null : Number(age);
+  const ageInDays = toDays(age, ageUnit || 'Years');
 
   const ageMatches = (rule) => {
-    if (rule.ageMin != null && (ageValue == null || ageValue < rule.ageMin)) return false;
-    if (rule.ageMax != null && (ageValue == null || ageValue > rule.ageMax)) return false;
+    const minDays = toDays(rule.ageMin, rule.ageUnit || 'Years');
+    const maxDays = toDays(rule.ageMax, rule.ageUnit || 'Years');
+    if (minDays != null && (ageInDays == null || ageInDays < minDays)) return false;
+    if (maxDays != null && (ageInDays == null || ageInDays > maxDays)) return false;
     return true;
   };
 

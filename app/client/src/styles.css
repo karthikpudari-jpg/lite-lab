@@ -154,6 +154,37 @@ th { background: #f9fafb; }
 }
 .status-tab:hover { background: #f1f5f9; }
 .status-tab.active { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+
+/* Laboratory Cards view - one card per bill/order, bundling every test on it
+   with a single bulk action, mirroring a queue-style lab worklist. */
+.lab-card2 {
+  display: flex; flex-direction: column; gap: 10px; background: #fff; border: 1px solid #eef2f6;
+  border-radius: 12px; padding: 16px; transition: box-shadow 0.15s ease;
+}
+.lab-card2:hover { box-shadow: 0 8px 20px -10px rgba(15, 23, 42, 0.25); }
+.lab-card2-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.lab-card2-sub { font-size: 12px; color: #64748b; margin-top: 2px; }
+.badge-outline {
+  display: inline-block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+  color: #64748b; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 2px 8px;
+}
+.badge-outline.visit-type { color: #1e40af; background: #eff6ff; border-color: #bfdbfe; align-self: flex-start; }
+.lab-card2-tests { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 8px; border-top: 1px solid #f1f5f9; }
+.lab-card2-footer { display: flex; gap: 14px; font-size: 12px; color: #64748b; }
+.lab-card2-footer .meta-item { display: flex; align-items: center; gap: 5px; }
+.lab-card2-actions { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+.icon-btn {
+  background: #fff; color: #64748b; border: 1px solid #e2e8f0; border-radius: 8px;
+  padding: 8px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.icon-btn:hover { background: #f1f5f9; }
+.cta-btn {
+  flex: 1; background: linear-gradient(135deg, var(--brand-teal), var(--brand-teal-light)); color: #fff;
+  border: none; border-radius: 8px; padding: 10px 14px; font-weight: 700; font-size: 13px;
+  letter-spacing: .02em; text-transform: uppercase;
+}
+.cta-btn:hover { filter: brightness(1.05); }
+.cta-btn:disabled { opacity: 0.6; cursor: default; }
 button {
   background: #2563eb; color: #fff; border: none; padding: 8px 14px;
   border-radius: 6px; cursor: pointer; font-size: 14px;
@@ -445,11 +476,29 @@ input, select, textarea {
 .trend-row-main { flex: 1; min-width: 0; }
 .trend-row-chart { flex-shrink: 0; text-align: center; }
 
-.lab-card { border-left: 4px solid #cbd5e1; transition: box-shadow 0.15s ease, transform 0.15s ease; }
-.lab-card:hover { box-shadow: 0 8px 20px -10px rgba(15, 23, 42, 0.25); }
-.lab-card.status-released { border-left-color: #16a34a; }
-.lab-card.status-inprogress { border-left-color: #d97706; }
-.lab-card.status-pending { border-left-color: #94a3b8; }
+/* One flat row per sample/test on the Laboratory work queue - a patient with
+   several tests appears as several independent rows, each with its own status
+   and actions, rather than nested inside a collapsible per-bill card. */
+.lab-row {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 12px 14px; border-radius: 10px; border: 1px solid #eef2f6; margin-bottom: 8px;
+  background: #fff; transition: box-shadow 0.15s ease;
+}
+.lab-row:hover { box-shadow: 0 8px 20px -10px rgba(15, 23, 42, 0.25); }
+.lab-row-id {
+  font-size: 11.5px; font-weight: 700; color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0;
+  padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+}
+.lab-row-patient { display: flex; align-items: center; gap: 8px; min-width: 150px; }
+.lab-row-status {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .02em; color: #475569; white-space: nowrap;
+}
+.lab-row-status .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.lab-row-test { font-size: 12.5px; font-weight: 600; color: #334155; background: #f1f5f9; padding: 4px 10px; border-radius: 8px; }
+.lab-row-meta { display: flex; align-items: center; gap: 14px; font-size: 12px; color: #64748b; margin-left: auto; }
+.lab-row-meta .meta-item { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.lab-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* Full-screen Review Results panel (result entry + verify, both use this). */
 .review-screen { position: fixed; inset: 0; z-index: 300; background: #fff; display: flex; flex-direction: column; }

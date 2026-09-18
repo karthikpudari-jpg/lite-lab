@@ -33,6 +33,7 @@ async function createBill(req, res) {
   const {
     patientId, umr, name, age, ageUnit, gender, mobile, email, address,
     testIds, referredDoctorName, walkInDate, discount, paymentMode, visitAddress, transactionNumber, remarks, payorId,
+    visitType, priority,
   } = req.body;
 
   if (!Array.isArray(testIds) || testIds.length === 0) {
@@ -111,6 +112,8 @@ async function createBill(req, res) {
         payorId: payor?.id || null,
         billNo: `INV-${Date.now()}`,
         walkInDate: walkInDate || new Date().toISOString().slice(0, 10),
+        visitType: visitType || 'WALK-IN',
+        priority: priority || 'ROUTINE',
         totalAmount,
         discount: discountAmount,
         paidAmount: totalAmount - discountAmount,

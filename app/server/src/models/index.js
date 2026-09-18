@@ -373,6 +373,8 @@ const Bill = sequelize.define('Bill', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   billNo: { type: DataTypes.STRING, allowNull: false },
   walkInDate: { type: DataTypes.DATEONLY },
+  visitType: { type: DataTypes.STRING, defaultValue: 'WALK-IN' }, // IPD | OPD | WALK-IN
+  priority: { type: DataTypes.STRING, defaultValue: 'ROUTINE' }, // ROUTINE | URGENT
   totalAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
   discount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
   paidAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
