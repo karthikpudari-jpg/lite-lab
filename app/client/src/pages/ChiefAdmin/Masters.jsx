@@ -43,6 +43,12 @@ export default function Masters() {
   const [selectedTestId, setSelectedTestId] = useState(null);
   const [error, setError] = useState('');
 
+  const [groups, setGroups] = useState([]); // Chief-Admin-created Test Groups
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [groupName, setGroupName] = useState('');
+  const [savingGroup, setSavingGroup] = useState(false);
+  const [groupError, setGroupError] = useState('');
+
   const [showTestModal, setShowTestModal] = useState(false);
   const [testForm, setTestForm] = useState(blankTestForm());
   const [savingTest, setSavingTest] = useState(false);
@@ -66,7 +72,11 @@ export default function Masters() {
     setTests(data);
     return { tests: data };
   }
-  useEffect(() => { load(); }, []);
+  async function loadGroups() {
+    const { data } = await api.get('/admin/masters/groups');
+    setGroups(data);
+  }
+  useEffect(() => { load(); loadGroups(); }, []);
 
   const selectedTest = tests.find((t) => t.id === selectedTestId);
 
@@ -74,6 +84,38 @@ export default function Masters() {
     const set = new Set(tests.map((t) => t.category).filter(Boolean));
     return [...set].sort();
   }, [tests]);
+
+  // Every group a test can be assigned to: explicitly-created groups, plus any
+  // legacy free-typed category still in use by an existing test - so nothing
+  // already in use silently disappears from the picker.
+  const groupOptions = useMemo(() => {
+    const set = new Set([...groups.map((g) => g.name), ...categories]);
+    return [...set].sort();
+  }, [groups, categories]);
+
+  function openNewGroup() {
+    setGroupError('');
+    setGroupName('');
+    setShowGroupModal(true);
+  }
+
+  async function handleSaveGroup(e) {
+    e.preventDefault();
+    if (savingGroup) return; // guard against rapid double-submit creating a duplicate group
+    setGroupError('');
+    setSavingGroup(true);
+    try {
+      const { data } = await api.post('/admin/masters/groups', { name: groupName.trim() });
+      await loadGroups();
+      setShowGroupModal(false);
+      // If the New Test modal is open, immediately assign the freshly-created group to it.
+      setTestForm((f) => (showTestModal ? { ...f, category: data.name } : f));
+    } catch (err) {
+      setGroupError(err.response?.data?.message || 'Failed to create group');
+    } finally {
+      setSavingGroup(false);
+    }
+  }
 
   const filteredTests = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -220,7 +262,10 @@ export default function Masters() {
         <div className="card masters-sidebar">
           <div className="masters-sidebar-head">
             <span>TESTS</span>
-            <button type="button" onClick={openNewTest}>+ New</button>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button type="button" className="secondary" onClick={openNewGroup}>+ New Group</button>
+              <button type="button" onClick={openNewTest}>+ New</button>
+            </div>
           </div>
           <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
             <option value="All">All groups ({tests.length})</option>
@@ -298,15 +343,17 @@ export default function Masters() {
                 <input value={testForm.testName} onChange={(e) => setTestForm((f) => ({ ...f, testName: e.target.value }))} required />
               </label>
               <label><span>Test Group</span>
-                <input
-                  value={testForm.category}
-                  onChange={(e) => setTestForm((f) => ({ ...f, category: e.target.value }))}
-                  placeholder="Pick an existing group or type a new one"
-                  list="test-group-options"
-                />
-                <datalist id="test-group-options">
-                  {categories.map((c) => <option key={c} value={c} />)}
-                </datalist>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <select
+                    style={{ flex: 1 }}
+                    value={testForm.category}
+                    onChange={(e) => setTestForm((f) => ({ ...f, category: e.target.value }))}
+                  >
+                    <option value="">— Uncategorized —</option>
+                    {groupOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <button type="button" className="secondary" onClick={openNewGroup}>+ New</button>
+                </div>
               </label>
               <label><span>Sample Type</span>
                 <input value={testForm.sampleType} onChange={(e) => setTestForm((f) => ({ ...f, sampleType: e.target.value }))} placeholder="e.g. Blood" />
@@ -314,6 +361,24 @@ export default function Masters() {
               <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                 <button type="submit" disabled={savingTest}>{savingTest ? 'Creating…' : 'Create Test'}</button>
                 <button type="button" className="secondary" onClick={() => setShowTestModal(false)}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showGroupModal && (
+        <div className="modal-overlay" onClick={() => setShowGroupModal(false)}>
+          <div className="modal-card" style={{ textAlign: 'left', width: 380 }} onClick={(e) => e.stopPropagation()}>
+            <h2>New Test Group</h2>
+            <form onSubmit={handleSaveGroup}>
+              <label><span>Group Name</span>
+                <input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="e.g. Haematology" required autoFocus />
+              </label>
+              {groupError && <p className="error-text">{groupError}</p>}
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <button type="submit" disabled={savingGroup || !groupName.trim()}>{savingGroup ? 'Creating…' : 'Create Group'}</button>
+                <button type="button" className="secondary" onClick={() => setShowGroupModal(false)}>Cancel</button>
               </div>
             </form>
           </div>

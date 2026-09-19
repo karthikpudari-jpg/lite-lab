@@ -187,6 +187,17 @@ const ClientUser = sequelize.define('ClientUser', {
 });
 
 // ---- MASTERS ------------------------------------------------------------
+// A Chief-Admin-managed catalog of Test Group names (e.g. "Haematology",
+// "Biochemistry"), so a test's group is picked from an explicitly-created
+// list instead of free-typed - TestMaster.category below still just stores
+// the chosen name as a string, this table exists purely so "create a group"
+// is its own action rather than an implicit side effect of creating a test.
+const TestGroup = sequelize.define('TestGroup', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  name: { type: DataTypes.STRING, allowNull: false, unique: true },
+  ...AUDIT_FIELDS,
+}, { tableName: 'test_group' });
+
 const TestMaster = sequelize.define('TestMaster', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   testCode: { type: DataTypes.STRING, unique: true, allowNull: false },
@@ -659,6 +670,7 @@ module.exports = {
   Role,
   RolePermission,
   ClientUser,
+  TestGroup,
   TestMaster,
   ParameterMaster,
   ParameterNormalRange,

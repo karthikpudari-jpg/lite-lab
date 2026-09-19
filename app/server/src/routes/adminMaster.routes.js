@@ -11,6 +11,9 @@ const upload = multer({ storage: multer.memoryStorage() });
 // Restricted to the ADMIN role - Marketing staff don't touch master data.
 router.use(authenticate, requireChiefAdminRole(CHIEF_ADMIN_ROLES.ADMIN));
 
+router.get('/groups', testCtrl.listTestGroups);
+router.post('/groups', testCtrl.createTestGroup);
+
 router.get('/tests', testCtrl.listTests);
 router.post('/tests', testCtrl.createTest);
 router.put('/tests/:id', testCtrl.updateTest);

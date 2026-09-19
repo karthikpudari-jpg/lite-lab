@@ -1,6 +1,6 @@
 const { Op } = require('sequelize');
 const XLSX = require('xlsx');
-const { TestMaster, ParameterMaster, ParameterNormalRange } = require('../models');
+const { TestGroup, TestMaster, ParameterMaster, ParameterNormalRange } = require('../models');
 
 const GENDER_OPTIONS = ['Male', 'Female', 'Other', 'Any'];
 const AGE_UNIT_OPTIONS = ['Years', 'Months', 'Days'];
@@ -26,6 +26,24 @@ async function generateParameterCode(parameterName) {
     code = `${base}${String(n).padStart(3, '0')}`;
   }
   return code;
+}
+
+// GET /api/admin/masters/groups  (Chief Admin only)
+async function listTestGroups(req, res) {
+  const groups = await TestGroup.findAll({ order: [['name', 'ASC']] });
+  return res.json(groups);
+}
+
+// POST /api/admin/masters/groups  { name }  (Chief Admin only)
+async function createTestGroup(req, res) {
+  const name = req.body.name?.trim();
+  if (!name) return res.status(400).json({ message: 'Group name is required' });
+
+  const existing = await TestGroup.findOne({ where: { name: { [Op.iLike]: name } } });
+  if (existing) return res.status(200).json(existing); // resubmit-safe, same as parameter creation
+
+  const group = await TestGroup.create({ name });
+  return res.status(201).json(group);
 }
 
 // POST /api/masters/tests
@@ -415,5 +433,5 @@ async function commitUpload(req, res) {
 
 module.exports = {
   createTest, listTests, updateTest, addParameter, addNormalRange, deleteNormalRange,
-  downloadTemplate, previewUpload, commitUpload,
+  downloadTemplate, previewUpload, commitUpload, listTestGroups, createTestGroup,
 };
