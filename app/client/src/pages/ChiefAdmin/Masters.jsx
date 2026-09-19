@@ -8,7 +8,7 @@ const AGE_UNIT_OPTIONS = ['Years', 'Months', 'Days'];
 const AGE_UNIT_ABBR = { Years: 'y', Months: 'm', Days: 'd' };
 const emptyRangeRow = () => ({ gender: 'Any', ageMin: '', ageMax: '', ageUnit: 'Years', normalRangeLow: '', normalRangeHigh: '' });
 const blankTestForm = () => ({ testCode: '', testName: '', category: '', sampleType: '' });
-const blankParamForm = () => ({ parameterName: '', unit: '', method: '', normalRangeLow: '', normalRangeHigh: '' });
+const blankParamForm = () => ({ parameterName: '', unit: '', method: '' });
 // Narrower than the app-wide .form-grid default (minmax 200px) so Gender/Age/Unit/Range fields
 // wrap two-three to a row instead of stacking one-per-row on a narrow/mobile screen.
 const rangeGridStyle = { alignItems: 'end', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))' };
@@ -110,7 +110,7 @@ export default function Masters() {
   function openAddParameter() {
     setError('');
     setParamForm(blankParamForm());
-    setRangeRows([]);
+    setRangeRows([emptyRangeRow()]);
     setShowParamModal(true);
   }
 
@@ -119,6 +119,10 @@ export default function Masters() {
     if (savingParam) return; // guard against rapid double-submit creating a duplicate parameter
     setError('');
     const normalRanges = rangeRows.filter((r) => r.normalRangeLow || r.normalRangeHigh);
+    if (normalRanges.length === 0) {
+      setError('At least one age/gender range (with a Range Low or Range High value) is required.');
+      return;
+    }
     setSavingParam(true);
     try {
       await api.post(`/admin/masters/tests/${selectedTestId}/parameters`, { ...paramForm, normalRanges });
@@ -332,18 +336,12 @@ export default function Masters() {
                 <label><span>Method</span>
                   <input value={paramForm.method} onChange={(e) => setParamForm((f) => ({ ...f, method: e.target.value }))} placeholder="e.g. Photometry" />
                 </label>
-                <label><span>Default Range Low</span>
-                  <input value={paramForm.normalRangeLow} onChange={(e) => setParamForm((f) => ({ ...f, normalRangeLow: e.target.value }))} />
-                </label>
-                <label><span>Default Range High</span>
-                  <input value={paramForm.normalRangeHigh} onChange={(e) => setParamForm((f) => ({ ...f, normalRangeHigh: e.target.value }))} />
-                </label>
               </div>
 
               <div style={{ marginTop: 10 }}>
                 <p style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>
-                  Optional age/gender-specific ranges (e.g. Male 18-60, Female 18-60). The default range above is
-                  used whenever a patient doesn't match any of these.
+                  Age/gender-specific ranges (e.g. Male 18-60, Female 18-60) - at least one is required, since this is
+                  the only way a normal range is set for this parameter.
                 </p>
                 {rangeRows.map((r, idx) => (
                   <div key={idx} className="form-grid" style={rangeGridStyle}>
