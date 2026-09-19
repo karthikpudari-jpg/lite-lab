@@ -4,17 +4,17 @@ const { Op } = require('sequelize');
 const { calculatePlanAmount } = require('../utils/pricing');
 
 /**
- * Generates the next available Client Code, e.g. CLI0001-SU or CLI0002-CA.
- * Both client-creation paths (self-signup and Chief-Admin-created) share one
- * sequence number - the suffix just marks which one created it, it doesn't
- * split them into two separate counters.
+ * Generates the next available Client Code, e.g. SG0001 (self-signup) or
+ * CLI0002 (Chief-Admin-created). Both client-creation paths share one
+ * sequence number - only the leading prefix marks which one created it,
+ * there's no separate suffix and no per-source counter.
  */
 async function generateClientCode(source) {
-  const suffix = source === 'CHIEF_ADMIN' ? 'CA' : 'SU';
+  const prefix = source === 'CHIEF_ADMIN' ? 'CLI' : 'SG';
 
   // The shared sequence number is the highest one already in use across every
-  // existing client code, regardless of its suffix - not a row count, which
-  // would collide with a manually-typed code from before this suffix scheme.
+  // existing client code, regardless of its prefix - not a row count, which
+  // would collide with a manually-typed code from before this scheme.
   const clients = await Client.findAll({ attributes: ['clientCode'] });
   let maxN = 0;
   for (const c of clients) {
@@ -23,10 +23,10 @@ async function generateClientCode(source) {
   }
 
   let n = maxN + 1;
-  let code = `CLI${String(n).padStart(4, '0')}-${suffix}`;
+  let code = `${prefix}${String(n).padStart(4, '0')}`;
   while (await Client.findOne({ where: { clientCode: code } })) {
     n += 1;
-    code = `CLI${String(n).padStart(4, '0')}-${suffix}`;
+    code = `${prefix}${String(n).padStart(4, '0')}`;
   }
   return code;
 }
