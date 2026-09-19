@@ -12,18 +12,28 @@ function requesterClientId(req) {
   return req.user?.type === 'CLIENT_USER' ? req.user.clientId : null;
 }
 
-// Parameter codes are always system-generated, never typed in - a short
-// letters-only prefix from the parameter name (e.g. "Hemoglobin" -> "HEMO"),
-// plus a zero-padded number bumped up until it's unique. Used identically
-// from both the client-side Test Parameters screen and the Chief Admin Test
-// Master screen, and from the Excel bulk upload.
-async function generateParameterCode(parameterName) {
-  const base = (parameterName || '').replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 4) || 'PARM';
-  let n = 1;
-  let code = `${base}${String(n).padStart(3, '0')}`;
+// Parameter codes are always system-generated, never typed in - one uniform
+// "PARM" prefix plus a zero-padded number, shared across every parameter
+// regardless of its name (not a per-name prefix like "HEMO001"/"GLUC001",
+// which made every parameter's own count effectively restart at 001). The
+// sequence number is the highest one already in use across every existing
+// parameter code, the same shared-sequence approach used for Client Code.
+// Used identically from the client-side Test Parameters screen, the Chief
+// Admin Test Master screen, and the Excel bulk upload.
+async function generateParameterCode() {
+  const prefix = 'PARM';
+  const existing = await ParameterMaster.findAll({ attributes: ['parameterCode'] });
+  let maxN = 0;
+  for (const p of existing) {
+    const match = p.parameterCode?.match(/(\d+)/);
+    if (match) maxN = Math.max(maxN, parseInt(match[1], 10));
+  }
+
+  let n = maxN + 1;
+  let code = `${prefix}${String(n).padStart(3, '0')}`;
   while (await ParameterMaster.findOne({ where: { parameterCode: code } })) {
     n += 1;
-    code = `${base}${String(n).padStart(3, '0')}`;
+    code = `${prefix}${String(n).padStart(3, '0')}`;
   }
   return code;
 }
@@ -64,7 +74,7 @@ async function createTest(req, res) {
       await ParameterMaster.create({
         testId: test.id,
         clientId,
-        parameterCode: await generateParameterCode(p.parameterName),
+        parameterCode: await generateParameterCode(),
         parameterName: p.parameterName,
         unit: p.unit,
         method: p.method,
@@ -143,7 +153,7 @@ async function addParameter(req, res) {
   });
   if (existing) return res.status(200).json(existing);
 
-  const parameterCode = await generateParameterCode(parameterName);
+  const parameterCode = await generateParameterCode();
   const parameter = await ParameterMaster.create({
     testId: test.id, clientId, parameterCode, parameterName, unit, method, normalRangeLow, normalRangeHigh,
   });
@@ -403,7 +413,7 @@ async function commitUpload(req, res) {
     const [parameter, paramCreated] = await ParameterMaster.findOrCreate({
       where: { testId: test.id, parameterName, clientId: null },
       defaults: {
-        parameterCode: await generateParameterCode(parameterName),
+        parameterCode: await generateParameterCode(),
         unit: row.unit, method: row.method, normalRangeLow: row.normalRangeLow, normalRangeHigh: row.normalRangeHigh,
       },
     });
