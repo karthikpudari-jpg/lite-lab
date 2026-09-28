@@ -51,6 +51,8 @@ async function start() {
   await sequelize.query('ALTER TABLE client_user ADD COLUMN IF NOT EXISTS department VARCHAR(255)');
   await sequelize.query('ALTER TABLE client_user ADD COLUMN IF NOT EXISTS designation VARCHAR(255)');
   await sequelize.query("ALTER TABLE client_user ADD COLUMN IF NOT EXISTS \"signaturePath\" VARCHAR(255)");
+  await sequelize.query("ALTER TABLE bill ADD COLUMN IF NOT EXISTS \"dueAmount\" DECIMAL(10,2) NOT NULL DEFAULT 0");
+  await sequelize.query("ALTER TABLE bill_discount ADD COLUMN IF NOT EXISTS \"cancelledAt\" TIMESTAMPTZ");
   await expireOverdueSubscriptions();
   setInterval(() => {
     expireOverdueSubscriptions().catch((err) => console.error('expireOverdueSubscriptions failed:', err));

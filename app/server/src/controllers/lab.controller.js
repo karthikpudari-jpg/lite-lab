@@ -170,10 +170,19 @@ async function verifySample(req, res) {
 // POST /api/lab/samples/:id/release
 async function releaseSample(req, res) {
   const { clientId } = req.user;
-  const sample = await Sample.findOne({ where: { id: req.params.id, clientId }, include: [Report] });
+  const sample = await Sample.findOne({
+    where: { id: req.params.id, clientId },
+    include: [Report, { model: BillItem, include: [Bill] }],
+  });
   if (!sample) return res.status(404).json({ message: 'Sample not found' });
   if (sample.status !== 'VERIFIED') {
     return res.status(400).json({ message: 'Sample must be verified before release' });
+  }
+  const dueAmount = Number(sample.BillItem?.Bill?.dueAmount || 0);
+  if (dueAmount > 0) {
+    return res.status(400).json({
+      message: `This bill has ₹${dueAmount.toFixed(2)} still due - collect it (Orders > Due Payment) before releasing the report.`,
+    });
   }
 
   await sample.update({ status: 'RELEASED' });

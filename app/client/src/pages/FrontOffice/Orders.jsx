@@ -170,6 +170,20 @@ export default function Orders() {
     }
   }
 
+  async function handleCancelDiscount(discountId) {
+    setDiscountError('');
+    setDiscountSaving(true);
+    try {
+      await api.put(`/billing/bills/${discountBill.id}/discounts/${discountId}/cancel`);
+      const freshBills = await load();
+      setDiscountBill((prev) => freshBills.find((b) => b.id === prev?.id) || prev);
+    } catch (err) {
+      setDiscountError(err.response?.data?.message || 'Failed to cancel discount');
+    } finally {
+      setDiscountSaving(false);
+    }
+  }
+
   return (
     <div className="card">
       <div className="topbar">
@@ -196,7 +210,7 @@ export default function Orders() {
         <thead>
           <tr>
             <th>Order ID</th><th>UMR</th><th>Patient</th><th>Ref. Doctor</th><th>Walk-in</th>
-            <th>Net Payable</th><th>Tests</th><th>Actions</th>
+            <th>Net Payable</th><th>Due</th><th>Tests</th><th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -210,6 +224,7 @@ export default function Orders() {
                 <td>{b.referredDoctor ? `Dr. ${b.referredDoctor}` : '—'}</td>
                 <td>{b.walkInDate}</td>
                 <td>₹{b.paidAmount}</td>
+                <td>{Number(b.dueAmount) > 0 ? <span className="badge PENDING">₹{b.dueAmount}</span> : '—'}</td>
                 <td>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                     {b.tests.map((t, i) => (
@@ -220,6 +235,7 @@ export default function Orders() {
                   </div>
                 </td>
                 <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button onClick={() => navigate(`/app/orders/${b.id}/edit`)}>Edit</button>
                   <button onClick={() => navigate(`/app/billing/print/${b.id}`)}>Print Bill</button>
                   <button disabled={!anyReleased} onClick={() => navigate(`/app/report/${b.id}`)}>Print Report</button>
                   {settings?.allowBillCancellationRefund && <button onClick={() => openRefundModal(b)}>Cancel / Refund</button>}
@@ -398,6 +414,30 @@ export default function Orders() {
               Applies an extra discount to this bill after billing, on top of any discount already given.
               Since the bill was already collected in full, this amount is handed back to the patient.
             </p>
+
+            {(discountBill.discounts || []).length > 0 && (
+              <table style={{ marginBottom: 12 }}>
+                <thead><tr><th>Amount</th><th>Mode</th><th>Reason</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                  {discountBill.discounts.map((d) => (
+                    <tr key={d.id}>
+                      <td>₹{d.amount}</td>
+                      <td>{d.mode}</td>
+                      <td>{d.reason}</td>
+                      <td>{d.cancelledAt ? <span className="badge CANCELLED">Cancelled</span> : <span className="badge PAID">Active</span>}</td>
+                      <td>
+                        {!d.cancelledAt && (
+                          <button type="button" className="secondary" disabled={discountSaving} onClick={() => handleCancelDiscount(d.id)}>
+                            Cancel
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
             <form onSubmit={submitDiscount}>
               <div className="form-grid">
                 <label><span>Discount Amount (max ₹{Number(discountBill.paidAmount).toFixed(2)})</span>

@@ -42,6 +42,8 @@ export default function FrontDesk() {
   const [visitType, setVisitType] = useState('WALK-IN');
   const [priority, setPriority] = useState('ROUTINE');
   const [discount, setDiscount] = useState('0');
+  const [hasDue, setHasDue] = useState(false); // patient pays only part now, rest recovered later
+  const [amountCollected, setAmountCollected] = useState('');
   const [paymentMode, setPaymentMode] = useState('');
   const [visitAddress, setVisitAddress] = useState('');
   const [transactionNumber, setTransactionNumber] = useState('');
@@ -133,12 +135,18 @@ export default function FrontDesk() {
 
   const gross = selectedPrices.reduce((s, p) => s + effectivePrice(p), 0);
   const netPayable = Math.max(0, gross - (Number(discount) || 0));
+  // Full amount by default (unchanged behaviour); "record a due balance" lets
+  // less than netPayable be collected now, the rest recovered later from
+  // Orders. Doesn't apply to credit billing - a payor bill is never "due"
+  // from the patient, it's invoiced to the payor on their own cycle.
+  const collectingNow = (!isCredit && hasDue) ? Math.min(netPayable, Math.max(0, Number(amountCollected) || 0)) : netPayable;
+  const dueNow = (!isCredit && hasDue) ? Math.max(0, netPayable - collectingNow) : 0;
 
   async function handleGenerateBill(e) {
     e.preventDefault();
     if (generating) return;
     setError('');
-    if (!isCredit && !paymentMode) {
+    if (!isCredit && collectingNow > 0 && !paymentMode) {
       setError('Payment Mode is required.');
       return;
     }
@@ -168,6 +176,7 @@ export default function FrontDesk() {
         transactionNumber: needsTransactionNumber ? transactionNumber : undefined,
         remarks,
         payorId: payorId || undefined,
+        amountCollected: (!isCredit && hasDue) ? collectingNow : undefined,
       };
       if (patient) {
         payload.patientId = patient.id;
@@ -194,6 +203,8 @@ export default function FrontDesk() {
     setDoctorName('');
     setPayorId('');
     setDiscount('0');
+    setHasDue(false);
+    setAmountCollected('');
     setPaymentMode('');
     setVisitAddress('');
     setTransactionNumber('');
@@ -392,8 +403,27 @@ export default function FrontDesk() {
           </p>
         )}
 
+        {!isCredit && netPayable > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500 }}>
+              <input type="checkbox" style={{ width: 'auto' }} checked={hasDue} onChange={(e) => { setHasDue(e.target.checked); setAmountCollected(''); }} />
+              Patient will pay only part now (leave a due balance, recovered later from Orders)
+            </label>
+            {hasDue && (
+              <div className="form-grid" style={{ alignItems: 'end', marginTop: 8 }}>
+                <label><span>Amount Collecting Now</span>
+                  <input type="number" min={0} max={netPayable} value={amountCollected} onChange={(e) => setAmountCollected(e.target.value)} placeholder="0" />
+                </label>
+                <div className="pay-stat-tile discount" style={{ margin: 0 }}>
+                  <div className="label">Due Balance</div><div className="value">₹{dueNow}</div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="form-grid">
-          {!isCredit && (
+          {!isCredit && collectingNow > 0 && (
             <label><span>Payment Mode *</span>
               <select value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)} required>
                 <option value="">— Select —</option>

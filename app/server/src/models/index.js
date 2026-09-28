@@ -397,6 +397,11 @@ const Bill = sequelize.define('Bill', {
   totalAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
   discount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
   paidAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
+  // What the patient still owes - either left over from billing time (paid
+  // less than the net payable) or added later (a test added after billing,
+  // or a post-billing discount that was itself cancelled). Recovered via
+  // DuePayment below; a report can't be released while this is above 0.
+  dueAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
   paymentMode: { type: DataTypes.STRING },
   visitAddress: { type: DataTypes.STRING },
   transactionNumber: { type: DataTypes.STRING },
@@ -440,8 +445,24 @@ const BillDiscount = sequelize.define('BillDiscount', {
   amount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
   mode: { type: DataTypes.STRING, allowNull: false },
   reason: { type: DataTypes.STRING, allowNull: false },
+  // Set when this discount is later reversed - kept as a record (never
+  // deleted) rather than removed, so the audit trail shows it was given and
+  // then cancelled, not that it never happened.
+  cancelledAt: { type: DataTypes.DATE },
   ...AUDIT_FIELDS,
 }, { tableName: 'bill_discount' });
+
+// One row per payment recorded against a bill's dueAmount - a patient billed
+// with a shortfall (or who owes again after a post-billing discount was
+// cancelled) pays it off in one or more installments, each its own record
+// with its own payment mode, the same pattern as Refund/BillDiscount above.
+const DuePayment = sequelize.define('DuePayment', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  amount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+  mode: { type: DataTypes.STRING, allowNull: false },
+  reference: { type: DataTypes.STRING },
+  ...AUDIT_FIELDS,
+}, { tableName: 'due_payment' });
 
 // ---- LAB ------------------------------------------------------------------
 const Sample = sequelize.define('Sample', {
@@ -597,6 +618,9 @@ Refund.belongsTo(BillItem, { foreignKey: 'billItemId' });
 Bill.hasMany(BillDiscount, { foreignKey: 'billId', onDelete: 'CASCADE' });
 BillDiscount.belongsTo(Bill, { foreignKey: 'billId' });
 
+Bill.hasMany(DuePayment, { foreignKey: 'billId', onDelete: 'CASCADE' });
+DuePayment.belongsTo(Bill, { foreignKey: 'billId' });
+
 Client.hasMany(Sample, { foreignKey: 'clientId', onDelete: 'CASCADE' });
 Sample.belongsTo(Client, { foreignKey: 'clientId' });
 
@@ -691,6 +715,7 @@ module.exports = {
   BillItem,
   Refund,
   BillDiscount,
+  DuePayment,
   Sample,
   Result,
   Report,

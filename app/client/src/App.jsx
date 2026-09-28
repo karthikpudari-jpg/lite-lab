@@ -20,6 +20,7 @@ import Tickets from './pages/Admin/Tickets';
 import RoleScreens from './pages/Admin/RoleScreens';
 import FrontDesk from './pages/FrontOffice/FrontDesk';
 import Orders from './pages/FrontOffice/Orders';
+import EditOrder from './pages/FrontOffice/EditOrder';
 import BillPrint from './pages/FrontOffice/BillPrint';
 import Laboratory from './pages/Lab/Laboratory';
 import LabReport from './pages/Lab/LabReport';
@@ -61,7 +62,8 @@ export default function App() {
         <Route path="tickets" element={<Tickets />} />
         <Route path="billing" element={<ProtectedRoute type="CLIENT_USER" roles={['FRONT_OFFICE']}><FrontDesk /></ProtectedRoute>} />
         <Route path="orders" element={<ProtectedRoute type="CLIENT_USER" roles={['FRONT_OFFICE', 'MANAGER']}><Orders /></ProtectedRoute>} />
-        <Route path="billing/print/:billId" element={<ProtectedRoute type="CLIENT_USER" roles={['FRONT_OFFICE']}><BillPrint /></ProtectedRoute>} />
+        <Route path="orders/:billId/edit" element={<ProtectedRoute type="CLIENT_USER" roles={['FRONT_OFFICE', 'MANAGER']}><EditOrder /></ProtectedRoute>} />
+        <Route path="billing/print/:billId" element={<ProtectedRoute type="CLIENT_USER" roles={['FRONT_OFFICE', 'MANAGER']}><BillPrint /></ProtectedRoute>} />
         <Route path="lab" element={<ProtectedRoute type="CLIENT_USER" roles={['LAB_USER']}><Laboratory /></ProtectedRoute>} />
         <Route path="report/:billId" element={<ProtectedRoute type="CLIENT_USER" roles={['LAB_USER', 'FRONT_OFFICE', 'MANAGER']}><LabReport /></ProtectedRoute>} />
         <Route path="reports" element={<ProtectedRoute type="CLIENT_USER" roles={['MANAGER']}><Reports /></ProtectedRoute>} />

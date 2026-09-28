@@ -1,8 +1,8 @@
 const crypto = require('crypto');
 const { Op } = require('sequelize');
 const {
-  sequelize, Bill, BillItem, Refund, BillDiscount, ClientTestPrice, TestMaster, Sample, Report, Patient, ReferralDoctor,
-  Client, Payor, PayorTestPrice, ClientTestShortName,
+  sequelize, Bill, BillItem, Refund, BillDiscount, DuePayment, ClientTestPrice, TestMaster, Sample, Report, Patient,
+  ReferralDoctor, Client, Payor, PayorTestPrice, ClientTestShortName,
 } = require('../models');
 const { findOrCreatePatient } = require('./patient.controller');
 const { findOrCreateDoctor } = require('./referralDoctor.controller');
@@ -17,6 +17,7 @@ const billIncludes = [
   Payor,
   { model: BillItem, include: [TestMaster, { model: Sample, include: [Report] }, Refund] },
   BillDiscount,
+  DuePayment,
 ];
 
 // POST /api/billing/bills
@@ -33,7 +34,7 @@ async function createBill(req, res) {
   const {
     patientId, umr, name, age, ageUnit, gender, mobile, email, address,
     testIds, referredDoctorName, walkInDate, discount, paymentMode, visitAddress, transactionNumber, remarks, payorId,
-    visitType, priority,
+    visitType, priority, amountCollected,
   } = req.body;
 
   if (!Array.isArray(testIds) || testIds.length === 0) {
@@ -41,12 +42,6 @@ async function createBill(req, res) {
   }
   if ((Number(discount) || 0) > 0 && !remarks?.trim()) {
     return res.status(400).json({ message: 'Remarks are required when a discount is given' });
-  }
-  // A credit (Payor) bill is settled later via a Payor invoice, so it has no
-  // payment mode of its own; every other bill is paid at the counter right
-  // now and must record how.
-  if (!payorId && !paymentMode) {
-    return res.status(400).json({ message: 'Payment Mode is required' });
   }
 
   let patient;
@@ -85,6 +80,30 @@ async function createBill(req, res) {
 
   const doctor = referredDoctorName ? await findOrCreateDoctor(clientId, referredDoctorName) : null;
   const discountAmount = Number(discount) || 0;
+  const totalAmount = prices.reduce((sum, p) => sum + chargedPriceFor(p), 0);
+  const netPayable = Math.max(0, totalAmount - discountAmount);
+
+  // A credit (Payor) bill is settled later via a Payor invoice - paidAmount
+  // there has always meant "amount to invoice the payor", not cash collected
+  // at the counter, so it's untouched by amountCollected/dueAmount below.
+  // For every other bill, amountCollected lets less than the full net
+  // payable be taken now (the rest becomes dueAmount, recovered later via
+  // POST /bills/:id/due-payments) - a payment mode is only required when
+  // something is actually being collected right now.
+  let paidAmountNum = netPayable;
+  let dueAmountNum = 0;
+  if (!payorId) {
+    paidAmountNum = (amountCollected === undefined || amountCollected === '' || amountCollected === null)
+      ? netPayable
+      : Math.max(0, Number(amountCollected) || 0);
+    if (paidAmountNum > netPayable) {
+      return res.status(400).json({ message: `Amount collected cannot exceed the net payable amount of ₹${netPayable.toFixed(2)}` });
+    }
+    dueAmountNum = netPayable - paidAmountNum;
+    if (paidAmountNum > 0 && !paymentMode) {
+      return res.status(400).json({ message: 'Payment Mode is required' });
+    }
+  }
 
   // Guard against duplicate bills from a rapid double-click / double-submit:
   // if the same patient already got a bill for the exact same set of tests
@@ -105,7 +124,6 @@ async function createBill(req, res) {
 
   try {
     const result = await sequelize.transaction(async (t) => {
-      const totalAmount = prices.reduce((sum, p) => sum + chargedPriceFor(p), 0);
       const bill = await Bill.create({
         clientId, patientId: patient.id, createdByUserId: userId,
         referredDoctorId: doctor?.id || null,
@@ -116,8 +134,9 @@ async function createBill(req, res) {
         priority: priority || 'ROUTINE',
         totalAmount,
         discount: discountAmount,
-        paidAmount: totalAmount - discountAmount,
-        paymentMode: payor ? null : paymentMode,
+        paidAmount: paidAmountNum,
+        dueAmount: dueAmountNum,
+        paymentMode: payor ? null : (paidAmountNum > 0 ? paymentMode : null),
         visitAddress: visitAddress || null,
         transactionNumber: transactionNumber || null,
         remarks: remarks || null,
@@ -150,6 +169,102 @@ async function getBill(req, res) {
   const bill = await Bill.findOne({ where: { id: req.params.id, clientId }, include: [...billIncludes, Client] });
   if (!bill) return res.status(404).json({ message: 'Bill not found' });
   return res.json(bill);
+}
+
+// POST /api/billing/bills/:billId/items  (Body: { testId })
+// Adds one more test to an existing bill - e.g. re-adding a test that was
+// cancelled by mistake (as a fresh line item; the cancelled one stays
+// cancelled, for the audit trail), or one more test ordered mid-visit. The
+// new test's price is added to the bill's total and, for a direct/self-pay
+// bill, to its dueAmount - it isn't collected inline here, it's recovered
+// via POST /bills/:billId/due-payments like any other due amount. A Payor
+// bill instead adds the price straight to paidAmount, matching how a
+// Payor's paidAmount has always meant "amount to invoice them", not cash
+// collected from the patient.
+async function addBillItem(req, res) {
+  const { clientId } = req.user;
+  const { billId } = req.params;
+  const { testId } = req.body;
+  if (!testId) return res.status(400).json({ message: 'testId is required' });
+
+  const bill = await Bill.findOne({ where: { id: billId, clientId } });
+  if (!bill) return res.status(404).json({ message: 'Bill not found' });
+
+  const priceRow = await ClientTestPrice.findOne({ where: { clientId, testId }, include: [TestMaster] });
+  if (!priceRow) return res.status(400).json({ message: 'Price not configured for this test' });
+
+  const existingActive = await BillItem.findOne({ where: { billId: bill.id, testId, status: 'ACTIVE' } });
+  if (existingActive) return res.status(409).json({ message: 'This test is already active on this bill' });
+
+  let price = Number(priceRow.price);
+  if (bill.payorId) {
+    const payorPrice = await PayorTestPrice.findOne({ where: { payorId: bill.payorId, testId } });
+    if (payorPrice) price = Number(payorPrice.price);
+  }
+
+  const result = await sequelize.transaction(async (t) => {
+    const billItem = await BillItem.create({
+      billId: bill.id, testId, price, originalPrice: Number(priceRow.price),
+    }, { transaction: t });
+
+    const sample = await Sample.create({
+      clientId, billItemId: billItem.id, barcode: generateBarcode(), status: 'PENDING_COLLECTION',
+    }, { transaction: t });
+    await Report.create({ sampleId: sample.id, status: 'PENDING' }, { transaction: t });
+
+    bill.totalAmount = Number(bill.totalAmount) + price;
+    if (bill.payorId) {
+      bill.paidAmount = Number(bill.paidAmount) + price;
+    } else {
+      bill.dueAmount = Number(bill.dueAmount) + price;
+    }
+    await bill.save({ transaction: t });
+
+    return billItem;
+  });
+
+  const full = await Bill.findOne({ where: { id: bill.id, clientId }, include: [...billIncludes, Client] });
+  return res.status(201).json({ billItem: result, bill: full });
+}
+
+// POST /api/billing/bills/:billId/due-payments  (Body: { amount, mode, reference })
+// Records a payment against whatever the bill's dueAmount currently is -
+// left over from billing time, or added later (a test added post-billing,
+// or a post-billing discount that was itself cancelled). Can be called more
+// than once for partial recoveries, same pattern as Refund/BillDiscount.
+async function recordDuePayment(req, res) {
+  const { clientId } = req.user;
+  const { billId } = req.params;
+  const { amount, mode, reference } = req.body;
+
+  const payAmount = Number(amount);
+  if (!payAmount || payAmount <= 0) {
+    return res.status(400).json({ message: 'A payment amount greater than 0 is required' });
+  }
+  if (!mode?.trim()) {
+    return res.status(400).json({ message: 'Payment mode is required' });
+  }
+
+  const bill = await Bill.findOne({ where: { id: billId, clientId } });
+  if (!bill) return res.status(404).json({ message: 'Bill not found' });
+  if (payAmount > Number(bill.dueAmount)) {
+    return res.status(400).json({ message: `Payment cannot exceed the due amount of ₹${Number(bill.dueAmount).toFixed(2)}` });
+  }
+
+  const result = await sequelize.transaction(async (t) => {
+    const duePayment = await DuePayment.create({
+      billId: bill.id, amount: payAmount, mode, reference: reference || null,
+    }, { transaction: t });
+
+    bill.dueAmount = Number(bill.dueAmount) - payAmount;
+    bill.paidAmount = Number(bill.paidAmount) + payAmount;
+    await bill.save({ transaction: t });
+
+    return duePayment;
+  });
+
+  const full = await Bill.findOne({ where: { id: bill.id, clientId }, include: [...billIncludes, Client] });
+  return res.status(201).json({ duePayment: result, bill: full });
 }
 
 // PUT /api/billing/bills/:billId/items/:itemId/cancel
@@ -285,6 +400,39 @@ async function applyPostBillingDiscount(req, res) {
   return res.status(201).json({ discount: result, bill: full });
 }
 
+// PUT /api/billing/bills/:billId/discounts/:discountId/cancel
+// Reverses a post-billing discount that was given by mistake or needs to be
+// clawed back. The row is kept, never deleted, and stamped with cancelledAt
+// instead - so the audit trail shows a discount was given and then
+// cancelled, not that it never happened. No money physically changes hands
+// here (unlike giving the discount, which hands cash back), so the amount
+// becomes dueAmount rather than being marked paid again.
+async function cancelPostBillingDiscount(req, res) {
+  const { clientId } = req.user;
+  const { billId, discountId } = req.params;
+
+  const bill = await Bill.findOne({ where: { id: billId, clientId } });
+  if (!bill) return res.status(404).json({ message: 'Bill not found' });
+
+  const billDiscount = await BillDiscount.findOne({ where: { id: discountId, billId: bill.id } });
+  if (!billDiscount) return res.status(404).json({ message: 'Discount not found on this bill' });
+  if (billDiscount.cancelledAt) return res.status(400).json({ message: 'This discount is already cancelled' });
+
+  const result = await sequelize.transaction(async (t) => {
+    billDiscount.cancelledAt = new Date();
+    await billDiscount.save({ transaction: t });
+
+    bill.discount = Math.max(0, Number(bill.discount) - Number(billDiscount.amount));
+    bill.dueAmount = Number(bill.dueAmount) + Number(billDiscount.amount);
+    await bill.save({ transaction: t });
+
+    return billDiscount;
+  });
+
+  const full = await Bill.findOne({ where: { id: bill.id, clientId }, include: [...billIncludes, Client] });
+  return res.status(200).json({ discount: result, bill: full });
+}
+
 // GET /api/billing/bills  (grid view - includes per-test status for each order)
 async function listBills(req, res) {
   const { clientId } = req.user;
@@ -302,12 +450,17 @@ async function listBills(req, res) {
     totalAmount: b.totalAmount,
     discount: b.discount,
     paidAmount: b.paidAmount,
+    dueAmount: b.dueAmount,
     paymentMode: b.paymentMode,
     createdAt: b.createdAt,
     patient: b.Patient ? { id: b.Patient.id, umr: b.Patient.umr, name: b.Patient.name, mobile: b.Patient.mobile } : null,
     referredDoctor: b.ReferralDoctor?.name || null,
     payor: b.Payor?.name || null,
-    postBillingDiscount: (b.BillDiscounts || []).reduce((sum, d) => sum + Number(d.amount), 0),
+    payorId: b.payorId,
+    postBillingDiscount: (b.BillDiscounts || []).filter((d) => !d.cancelledAt).reduce((sum, d) => sum + Number(d.amount), 0),
+    discounts: (b.BillDiscounts || []).map((d) => ({
+      id: d.id, amount: d.amount, mode: d.mode, reason: d.reason, cancelledAt: d.cancelledAt,
+    })),
     tests: b.BillItems.map((item) => ({
       id: item.id,
       testName: item.TestMaster?.testName,
@@ -407,5 +560,6 @@ async function updateBillingSettings(req, res) {
 
 module.exports = {
   createBill, getBill, listBills, listTestPrices, listPayors, listPayorTestPrices, cancelBillItem,
-  applyPostBillingDiscount, getBillingSettings, updateBillingSettings,
+  applyPostBillingDiscount, cancelPostBillingDiscount, addBillItem, recordDuePayment,
+  getBillingSettings, updateBillingSettings,
 };
