@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { Client, ClientSubscription, ClientUser, Role, ChiefAdmin, sequelize } = require('../models');
 const { Op } = require('sequelize');
@@ -140,6 +141,21 @@ async function createClient(req, res) {
         createdUsers.push({ id: created.id, username: created.username, roles: roles.map((r) => r.name) });
       }
 
+      // One Chief-Admin support login per client, auto-created here - lets
+      // Chief Admin log in (client code + "chiefadmin" + a password reset
+      // from Client Detail whenever it's actually needed) to help
+      // troubleshoot, without ever touching the client's own credentials.
+      // Never counted as one of the client's own billable users.
+      const adminRole = await Role.findOne({ where: { name: 'ADMIN' }, transaction: t });
+      if (adminRole) {
+        const systemUser = await ClientUser.create({
+          clientId: client.id, username: 'chiefadmin',
+          passwordHash: await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10),
+          name: 'Chief Admin Support', isSystemUser: true,
+        }, { transaction: t });
+        await systemUser.setRoles([adminRole], { transaction: t });
+      }
+
       return { client, users: createdUsers };
     });
 
@@ -164,7 +180,7 @@ async function listClients(req, res) {
   const where = status ? { paymentStatus: status } : {};
   const clients = await Client.findAll({
     where,
-    include: [{ model: ClientUser, attributes: ['id'] }],
+    include: [{ model: ClientUser, attributes: ['id'], where: { isSystemUser: false }, required: false }],
     order: [['createdAt', 'DESC']],
   });
 
@@ -230,7 +246,7 @@ async function updateClient(req, res) {
   if (marketingPersonPrice != null) {
     marketingFee = Number(marketingPersonPrice) || 0;
     if (marketingFee < 0) return res.status(400).json({ message: 'marketingPersonPrice cannot be negative' });
-    const userCount = await ClientUser.count({ where: { clientId: client.id } });
+    const userCount = await ClientUser.count({ where: { clientId: client.id, isSystemUser: false } });
     monthlyAmount = calculatePlanAmount(userCount) + marketingFee;
   }
 
@@ -271,7 +287,34 @@ async function previewNextClientCode(req, res) {
   return res.json({ clientCode });
 }
 
+// Called once at server startup (see index.js) - createClient only auto-adds
+// the "chiefadmin" support login for clients created from now on, so every
+// client that already existed before this feature needs it added too.
+// Idempotent: skips any client that already has one.
+async function backfillSystemUsers() {
+  const adminRole = await Role.findOne({ where: { name: 'ADMIN' } });
+  if (!adminRole) return;
+
+  const clients = await Client.findAll({
+    include: [{ model: ClientUser, where: { isSystemUser: true }, required: false }],
+  });
+  const missing = clients.filter((c) => (c.ClientUsers || []).length === 0);
+  if (missing.length === 0) return;
+
+  for (const client of missing) {
+    const existingUsername = await ClientUser.findOne({ where: { clientId: client.id, username: 'chiefadmin' } });
+    if (existingUsername) continue; // a real staff user already happens to be named "chiefadmin" - don't collide
+    const systemUser = await ClientUser.create({
+      clientId: client.id, username: 'chiefadmin',
+      passwordHash: await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10),
+      name: 'Chief Admin Support', isSystemUser: true,
+    });
+    await systemUser.setRoles([adminRole]);
+  }
+  console.log(`Backfilled a Chief Admin support login for ${missing.length} existing client(s).`);
+}
+
 module.exports = {
   createClient, listClients, getClient, updateClient, listMarketingPersons, createInitialSubscription, currentMonthRange,
-  generateClientCode, previewNextClientCode,
+  generateClientCode, previewNextClientCode, backfillSystemUsers,
 };

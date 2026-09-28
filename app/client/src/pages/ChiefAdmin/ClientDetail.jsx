@@ -20,6 +20,9 @@ export default function ClientDetail() {
   const [userRoleEdits, setUserRoleEdits] = useState({});
   const [userProfileEdits, setUserProfileEdits] = useState({}); // { [userId]: { department, designation } }
   const [signatureUploading, setSignatureUploading] = useState(null); // userId currently uploading
+  const [passwordResetFor, setPasswordResetFor] = useState(null); // userId currently entering a new password
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -130,6 +133,25 @@ export default function ClientDetail() {
     }
   }
 
+  async function handleResetPassword(userId) {
+    if (passwordSaving) return; // guard against rapid double-submit
+    if (!newPassword.trim()) {
+      setError('Enter a new password first');
+      return;
+    }
+    setError('');
+    setPasswordSaving(true);
+    try {
+      await api.put(`/clients/${id}/users/${userId}`, { password: newPassword });
+      setPasswordResetFor(null);
+      setNewPassword('');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to reset password');
+    } finally {
+      setPasswordSaving(false);
+    }
+  }
+
   async function handleUploadSignature(userId, file) {
     if (!file) return;
     setError('');
@@ -179,6 +201,8 @@ export default function ClientDetail() {
     }
   }
 
+  const billableUsers = users.filter((u) => !u.isSystemUser);
+
   if (!client || !form) return <p>Loading…</p>;
 
   return (
@@ -205,7 +229,7 @@ export default function ClientDetail() {
           </label>
           <label><span>Monthly Amount</span>
             <input
-              value={`₹${calculatePlanAmount(users.length) + (Number(form.marketingPersonPrice) || 0)} (${users.length} user${users.length === 1 ? '' : 's'} + ₹${Number(form.marketingPersonPrice) || 0} marketing)`}
+              value={`₹${calculatePlanAmount(billableUsers.length) + (Number(form.marketingPersonPrice) || 0)} (${billableUsers.length} user${billableUsers.length === 1 ? '' : 's'} + ₹${Number(form.marketingPersonPrice) || 0} marketing)`}
               disabled
             />
           </label>
@@ -269,7 +293,10 @@ export default function ClientDetail() {
               const profileDirty = !!userProfileEdits[u.id];
               return (
                 <tr key={u.id}>
-                  <td>{u.username}</td>
+                  <td>
+                    {u.username}
+                    {u.isSystemUser && <div><span className="badge PENDING" title="Auto-created for Chief Admin support login - not a billable staff user">System</span></div>}
+                  </td>
                   <td>{u.name}</td>
                   <td>
                     <input
@@ -297,9 +324,25 @@ export default function ClientDetail() {
                     <RoleCheckboxes value={rolesForUser(u)} onChange={(roleNames) => setUserRoleEdits((edits) => ({ ...edits, [u.id]: roleNames }))} />
                   </td>
                   <td>{u.active ? 'Yes' : 'No'}</td>
-                  <td style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <td style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 160 }}>
                     {userRoleEdits[u.id] && <button type="button" onClick={() => handleSaveUserRoles(u.id)}>Save Roles</button>}
                     {profileDirty && <button type="button" onClick={() => handleSaveUserProfile(u.id)}>Save Dept/Designation</button>}
+                    {passwordResetFor === u.id ? (
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <input
+                          type="password" placeholder="New password" style={{ width: 110 }}
+                          value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+                        />
+                        <button type="button" disabled={passwordSaving} onClick={() => handleResetPassword(u.id)}>
+                          {passwordSaving ? '…' : 'Save'}
+                        </button>
+                        <button type="button" className="secondary" onClick={() => { setPasswordResetFor(null); setNewPassword(''); }}>✕</button>
+                      </div>
+                    ) : (
+                      <button type="button" className="secondary" onClick={() => { setPasswordResetFor(u.id); setNewPassword(''); }}>
+                        Reset Password
+                      </button>
+                    )}
                   </td>
                 </tr>
               );

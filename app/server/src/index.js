@@ -7,6 +7,7 @@ const cors = require('cors');
 const { sequelize } = require('./models');
 const routes = require('./routes');
 const { expireOverdueSubscriptions } = require('./controllers/subscription.controller');
+const { backfillSystemUsers } = require('./controllers/client.controller');
 
 const app = express();
 const UPLOAD_ROOT = path.join(__dirname, '..', 'uploads');
@@ -53,6 +54,8 @@ async function start() {
   await sequelize.query("ALTER TABLE client_user ADD COLUMN IF NOT EXISTS \"signaturePath\" VARCHAR(255)");
   await sequelize.query("ALTER TABLE bill ADD COLUMN IF NOT EXISTS \"dueAmount\" DECIMAL(10,2) NOT NULL DEFAULT 0");
   await sequelize.query("ALTER TABLE bill_discount ADD COLUMN IF NOT EXISTS \"cancelledAt\" TIMESTAMPTZ");
+  await sequelize.query("ALTER TABLE client_user ADD COLUMN IF NOT EXISTS \"isSystemUser\" BOOLEAN NOT NULL DEFAULT false");
+  await backfillSystemUsers();
   await expireOverdueSubscriptions();
   setInterval(() => {
     expireOverdueSubscriptions().catch((err) => console.error('expireOverdueSubscriptions failed:', err));

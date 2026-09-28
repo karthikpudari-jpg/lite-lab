@@ -179,6 +179,12 @@ const ClientUser = sequelize.define('ClientUser', {
   designation: { type: DataTypes.STRING },
   signaturePath: { type: DataTypes.STRING },
   active: { type: DataTypes.BOOLEAN, defaultValue: true },
+  // Auto-created once per client (see createClient) so Chief Admin can log in
+  // as that client - using the client's own code plus this user - to help
+  // troubleshoot an issue without needing the client's own credentials.
+  // Never counted toward the client's billable user count or shown as one
+  // of their own staff.
+  isSystemUser: { type: DataTypes.BOOLEAN, defaultValue: false },
   // Identifies this account's one currently-valid login session - set at
   // login and stamped into the JWT, so logging in again elsewhere evicts
   // whatever session was active before (see auth.middleware.js).

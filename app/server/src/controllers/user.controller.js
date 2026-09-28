@@ -46,7 +46,7 @@ async function createUser(req, res) {
   // plus this client's marketing person price (if any) stays included in the total.
   // Already-created subscription cycles keep their locked-in price - this only
   // affects future cycles.
-  const userCount = await ClientUser.count({ where: { clientId } });
+  const userCount = await ClientUser.count({ where: { clientId, isSystemUser: false } });
   await client.update({ monthlyAmount: calculatePlanAmount(userCount) + Number(client.marketingPersonPrice || 0) });
 
   return res.status(201).json({ id: user.id, username: user.username, roles: roles.map((r) => r.name) });
