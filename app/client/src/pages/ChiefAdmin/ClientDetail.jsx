@@ -26,6 +26,11 @@ export default function ClientDetail() {
   const [saveMessage, setSaveMessage] = useState('');
   const [error, setError] = useState('');
 
+  const [manualPaymentForm, setManualPaymentForm] = useState({ months: '1', mode: 'Cash', transactionId: '', remarks: '' });
+  const [manualPaymentSaving, setManualPaymentSaving] = useState(false);
+  const [manualPaymentMessage, setManualPaymentMessage] = useState('');
+  const [manualPaymentError, setManualPaymentError] = useState('');
+
   // Role -> screen access for this client's own staff - `defaults` is the
   // platform-wide ceiling (read-only here, set on Role Screen Defaults),
   // `effective` is this client's own override, editable and saved per role.
@@ -79,6 +84,29 @@ export default function ClientDetail() {
       load();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to update client');
+    }
+  }
+
+  async function handleRecordManualPayment(e) {
+    e.preventDefault();
+    if (manualPaymentSaving) return; // guard against rapid double-submit recording the payment twice
+    setManualPaymentError('');
+    setManualPaymentMessage('');
+    setManualPaymentSaving(true);
+    try {
+      const { data } = await api.post(`/clients/${id}/manual-payment`, {
+        months: Number(manualPaymentForm.months) || 1,
+        mode: manualPaymentForm.mode,
+        transactionId: manualPaymentForm.transactionId || undefined,
+        remarks: manualPaymentForm.remarks || undefined,
+      });
+      setManualPaymentMessage(`${data.message} Paid through ${data.paidThrough}.`);
+      setManualPaymentForm({ months: '1', mode: 'Cash', transactionId: '', remarks: '' });
+      load();
+    } catch (err) {
+      setManualPaymentError(err.response?.data?.message || 'Failed to record payment');
+    } finally {
+      setManualPaymentSaving(false);
     }
   }
 
@@ -270,6 +298,35 @@ export default function ClientDetail() {
             {subscriptions.length === 0 && <tr><td colSpan={6}>No subscription cycles yet.</td></tr>}
           </tbody>
         </table>
+
+        <h4 style={{ marginTop: 18 }}>Record a Direct Payment</h4>
+        <p style={{ fontSize: 13, color: '#64748b' }}>
+          For a client that paid you directly (cash, bank transfer, etc.) instead of through the in-app QR/online
+          checkout. Recording it here enables their access immediately - same as an online payment would.
+        </p>
+        <form onSubmit={handleRecordManualPayment} className="form-grid" style={{ alignItems: 'end' }}>
+          <label><span>Months Covered</span>
+            <input
+              type="number" min="1" max="24"
+              value={manualPaymentForm.months}
+              onChange={(e) => setManualPaymentForm((f) => ({ ...f, months: e.target.value }))}
+            />
+          </label>
+          <label><span>Payment Mode</span>
+            <select value={manualPaymentForm.mode} onChange={(e) => setManualPaymentForm((f) => ({ ...f, mode: e.target.value }))}>
+              <option>Cash</option><option>Bank Transfer</option><option>UPI</option><option>Cheque</option><option>Other</option>
+            </select>
+          </label>
+          <label><span>Reference / Transaction ID (optional)</span>
+            <input value={manualPaymentForm.transactionId} onChange={(e) => setManualPaymentForm((f) => ({ ...f, transactionId: e.target.value }))} />
+          </label>
+          <label><span>Remarks (optional)</span>
+            <input value={manualPaymentForm.remarks} onChange={(e) => setManualPaymentForm((f) => ({ ...f, remarks: e.target.value }))} />
+          </label>
+          <button type="submit" disabled={manualPaymentSaving}>{manualPaymentSaving ? 'Recording…' : 'Record Payment'}</button>
+        </form>
+        {manualPaymentMessage && <p style={{ color: '#166534' }}>{manualPaymentMessage}</p>}
+        {manualPaymentError && <p className="error-text">{manualPaymentError}</p>}
       </div>
 
       <div className="card">

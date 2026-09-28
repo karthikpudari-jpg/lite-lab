@@ -2,6 +2,8 @@ const { ClientPayment, ClientSubscription, Client } = require('../models');
 const { createOrder, verifyPaymentSignature, verifyWebhookSignature, isMock } = require('../utils/razorpay');
 const { getOrCreateCurrentSubscription, getOrCreatePayableSubscription, createAdvanceCycles, getPaidThroughDate } = require('./subscription.controller');
 
+const MANUAL_PAYMENT_MODES = ['Cash', 'Bank Transfer', 'UPI', 'Cheque', 'Other'];
+
 const MAX_ADVANCE_MONTHS = 24;
 
 /** Marks a subscription + payment + client as PAID, extending extra advance cycles if paid for. Idempotent. */
@@ -76,6 +78,48 @@ async function createPaymentOrder(req, res) {
     monthsCovered,
     monthlyAmount: subscription.amount,
   });
+}
+
+// POST /api/clients/:clientId/manual-payment  (Chief Admin only)
+// For a client that paid Chief Admin directly (cash, bank transfer, etc.)
+// outside the app instead of through the in-app QR/Razorpay checkout.
+// Reuses the exact same markPaid() the Razorpay flow uses, so this updates
+// the client's paymentStatus and the covered subscription cycle(s) in one
+// place - both Chief Admin's own dashboard and the client's own login/home
+// screen read from that same data, so both reflect it immediately, with no
+// separate sync step.
+async function recordManualPayment(req, res) {
+  const { clientId } = req.params;
+  const { months, mode, transactionId, remarks } = req.body;
+
+  const client = await Client.findByPk(clientId);
+  if (!client) return res.status(404).json({ message: 'Client not found' });
+  if (!mode || !MANUAL_PAYMENT_MODES.includes(mode)) {
+    return res.status(400).json({ message: `mode must be one of ${MANUAL_PAYMENT_MODES.join(', ')}` });
+  }
+
+  const monthsCovered = Math.max(1, Math.min(MAX_ADVANCE_MONTHS, Number(months) || 1));
+  const subscription = await getOrCreatePayableSubscription(clientId);
+  const totalAmount = Number(subscription.amount) * monthsCovered;
+
+  const payment = await ClientPayment.create({
+    clientId,
+    subscriptionId: subscription.id,
+    amount: totalAmount,
+    monthsCovered,
+    status: 'CREATED',
+  });
+
+  await markPaid({
+    payment,
+    subscription,
+    transactionId: transactionId || undefined,
+    paymentMode: mode,
+    gatewayResponse: { manualEntry: true, remarks: remarks || null },
+  });
+
+  const paidThrough = await getPaidThroughDate(clientId);
+  return res.status(201).json({ message: 'Payment recorded - client access enabled.', monthsCovered, paidThrough });
 }
 
 // POST /api/payments/verify  (frontend callback after Razorpay checkout closes)
@@ -153,4 +197,6 @@ async function paymentStatus(req, res) {
   });
 }
 
-module.exports = { createPaymentOrder, verifyPayment, razorpayWebhook, paymentStatus };
+module.exports = {
+  createPaymentOrder, verifyPayment, razorpayWebhook, paymentStatus, recordManualPayment, MANUAL_PAYMENT_MODES,
+};

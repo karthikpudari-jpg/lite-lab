@@ -7,6 +7,7 @@ const subCtrl = require('../controllers/subscription.controller');
 const userCtrl = require('../controllers/user.controller');
 const priceCtrl = require('../controllers/clientTestPrice.controller');
 const roleScreenCtrl = require('../controllers/roleScreen.controller');
+const paymentCtrl = require('../controllers/payment.controller');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -22,6 +23,8 @@ router.put('/:id', clientCtrl.updateClient);
 
 router.get('/:clientId/subscriptions', subCtrl.listSubscriptions);
 router.get('/:clientId/subscriptions/current', subCtrl.getCurrentSubscription);
+// A client that paid Chief Admin directly (outside the app) - ADMIN only, money-touching like role-screens below.
+router.post('/:clientId/manual-payment', requireChiefAdminRole(CHIEF_ADMIN_ROLES.ADMIN), paymentCtrl.recordManualPayment);
 
 router.post('/:clientId/users', userCtrl.createUser);
 router.get('/:clientId/users', userCtrl.listUsers);
