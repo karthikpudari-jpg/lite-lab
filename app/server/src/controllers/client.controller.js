@@ -32,6 +32,17 @@ async function generateClientCode(source) {
   return code;
 }
 
+// A readable random password for the auto-created chiefadmin support login -
+// short hex (like crypto.randomBytes(24).toString('hex')) is secure but
+// impossible to read/type back; this trades a little entropy for something
+// a person can actually copy and use right after client creation.
+function generateReadablePassword() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  let pw = '';
+  for (let i = 0; i < 12; i += 1) pw += chars[crypto.randomInt(chars.length)];
+  return pw;
+}
+
 function currentMonthRange(date = new Date()) {
   const from = new Date(date.getFullYear(), date.getMonth(), 1);
   const to = new Date(date.getFullYear(), date.getMonth() + 1, 0);
@@ -142,21 +153,27 @@ async function createClient(req, res) {
       }
 
       // One Chief-Admin support login per client, auto-created here - lets
-      // Chief Admin log in (client code + "chiefadmin" + a password reset
-      // from Client Detail whenever it's actually needed) to help
+      // Chief Admin log in (client code + "chiefadmin" + the password
+      // returned below, once, same as the client's own staff passwords
+      // Chief Admin already knows because they typed them) to help
       // troubleshoot, without ever touching the client's own credentials.
-      // Never counted as one of the client's own billable users.
+      // Never counted as one of the client's own billable users. The
+      // password can always be changed later too (Client Detail > Reset
+      // Password), this is just what it's created with.
       const adminRole = await Role.findOne({ where: { name: 'ADMIN' }, transaction: t });
+      let systemUserCredentials = null;
       if (adminRole) {
+        const systemPassword = generateReadablePassword();
         const systemUser = await ClientUser.create({
           clientId: client.id, username: 'chiefadmin',
-          passwordHash: await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10),
+          passwordHash: await bcrypt.hash(systemPassword, 10),
           name: 'Chief Admin Support', isSystemUser: true,
         }, { transaction: t });
         await systemUser.setRoles([adminRole], { transaction: t });
+        systemUserCredentials = { username: 'chiefadmin', password: systemPassword };
       }
 
-      return { client, users: createdUsers };
+      return { client, users: createdUsers, systemUser: systemUserCredentials };
     });
 
     return res.status(201).json(result);
@@ -304,12 +321,17 @@ async function backfillSystemUsers() {
   for (const client of missing) {
     const existingUsername = await ClientUser.findOne({ where: { clientId: client.id, username: 'chiefadmin' } });
     if (existingUsername) continue; // a real staff user already happens to be named "chiefadmin" - don't collide
+    const systemPassword = generateReadablePassword();
     const systemUser = await ClientUser.create({
       clientId: client.id, username: 'chiefadmin',
-      passwordHash: await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10),
+      passwordHash: await bcrypt.hash(systemPassword, 10),
       name: 'Chief Admin Support', isSystemUser: true,
     });
     await systemUser.setRoles([adminRole]);
+    // Only place this password is ever visible - logged once here so it can
+    // be read off the server logs, same idea as returning it from
+    // createClient for a client made from now on (see there for why).
+    console.log(`Chief Admin support login for ${client.clientCode}: chiefadmin / ${systemPassword}`);
   }
   console.log(`Backfilled a Chief Admin support login for ${missing.length} existing client(s).`);
 }

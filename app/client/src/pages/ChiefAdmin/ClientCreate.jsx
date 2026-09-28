@@ -99,6 +99,19 @@ export default function ClientCreate() {
             {result.users.map((u) => <tr key={u.id}><td>{u.username}</td><td>{u.roles.join(', ')}</td></tr>)}
           </tbody>
         </table>
+        {result.systemUser && (
+          <div style={{ marginTop: 16, background: '#fef9c3', border: '1px solid #fde68a', borderRadius: 8, padding: 12 }}>
+            <strong>Chief Admin support login (write this down — shown only once):</strong>
+            <p style={{ margin: '6px 0 0' }}>
+              Client Code <strong>{result.client.clientCode}</strong> · Username <strong>{result.systemUser.username}</strong> ·
+              Password <strong>{result.systemUser.password}</strong>
+            </p>
+            <p style={{ margin: '6px 0 0', fontSize: 12, color: '#854d0e' }}>
+              Use this to log in as this client whenever they need help - it isn't counted as one of their billable
+              users. Reset it anytime from this client's Users list if needed.
+            </p>
+          </div>
+        )}
         <button style={{ marginTop: 16 }} onClick={() => navigate('/chief-admin')}>
           Done — Back to Dashboard
         </button>
