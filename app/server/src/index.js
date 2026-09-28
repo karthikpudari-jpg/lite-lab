@@ -55,6 +55,7 @@ async function start() {
   await sequelize.query("ALTER TABLE bill ADD COLUMN IF NOT EXISTS \"dueAmount\" DECIMAL(10,2) NOT NULL DEFAULT 0");
   await sequelize.query("ALTER TABLE bill_discount ADD COLUMN IF NOT EXISTS \"cancelledAt\" TIMESTAMPTZ");
   await sequelize.query("ALTER TABLE client_user ADD COLUMN IF NOT EXISTS \"isSystemUser\" BOOLEAN NOT NULL DEFAULT false");
+  await sequelize.query("ALTER TABLE client ADD COLUMN IF NOT EXISTS \"qrPaymentRequired\" BOOLEAN NOT NULL DEFAULT true");
   await backfillSystemUsers();
   await expireOverdueSubscriptions();
   setInterval(() => {

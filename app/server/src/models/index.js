@@ -96,6 +96,13 @@ const Client = sequelize.define('Client', {
     defaultValue: 'PENDING',
   },
   active: { type: DataTypes.BOOLEAN, defaultValue: true },
+  // Chief-Admin-controlled, set at client creation (editable after): whether
+  // this client's own staff can self-serve pay via the in-app QR/Razorpay
+  // checkout when their subscription comes due. Off means Chief Admin
+  // handles their billing directly (see Client Detail's "Record a Direct
+  // Payment") - the client just sees that payment is pending, no Pay Now
+  // button, since there's nothing for them to do themselves.
+  qrPaymentRequired: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   reportLogoPath: { type: DataTypes.STRING },
   reportLetterheadPath: { type: DataTypes.STRING },
   // Chief-Admin-controlled: whether this clinic's Front Office can cancel a

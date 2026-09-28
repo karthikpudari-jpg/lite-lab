@@ -90,7 +90,7 @@ async function createInitialSubscription(client, t, range) {
 async function createClient(req, res) {
   const {
     clientName, mobile, email, address, salesPerson, marketingPersonPrice, monthlyAmount: monthlyAmountOverride,
-    startDate, endDate, users,
+    startDate, endDate, users, qrPaymentRequired,
   } = req.body;
 
   if (!clientName || !startDate || !endDate) {
@@ -131,6 +131,7 @@ async function createClient(req, res) {
       const client = await Client.create({
         clientCode, clientName, mobile, email, address, salesPerson,
         marketingPersonPrice: marketingFee, monthlyAmount, paymentStatus: 'PENDING',
+        qrPaymentRequired: qrPaymentRequired !== false,
       }, { transaction: t });
 
       await createInitialSubscription(client, t, { from: startDate, to: endDate });
@@ -256,7 +257,10 @@ async function updateClient(req, res) {
   const client = await Client.findByPk(req.params.id);
   if (!client) return res.status(404).json({ message: 'Client not found' });
 
-  const { clientName, mobile, email, address, salesPerson, marketingPersonPrice, active, allowBillCancellationRefund } = req.body;
+  const {
+    clientName, mobile, email, address, salesPerson, marketingPersonPrice, active, allowBillCancellationRefund,
+    qrPaymentRequired,
+  } = req.body;
 
   let monthlyAmount = client.monthlyAmount;
   let marketingFee = client.marketingPersonPrice;
@@ -277,6 +281,7 @@ async function updateClient(req, res) {
     monthlyAmount,
     active: active ?? client.active,
     allowBillCancellationRefund: allowBillCancellationRefund ?? client.allowBillCancellationRefund,
+    qrPaymentRequired: qrPaymentRequired ?? client.qrPaymentRequired,
   });
   return res.json(client);
 }

@@ -63,6 +63,7 @@ export default function ClientDetail() {
       monthlyAmount: clientRes.data.monthlyAmount,
       active: clientRes.data.active,
       allowBillCancellationRefund: clientRes.data.allowBillCancellationRefund,
+      qrPaymentRequired: clientRes.data.qrPaymentRequired,
     });
     setUsers(clientRes.data.ClientUsers || []);
     setUserRoleEdits({});
@@ -274,6 +275,15 @@ export default function ClientDetail() {
             >
               <option value="no">Disabled</option>
               <option value="yes">Enabled</option>
+            </select>
+          </label>
+          <label><span>QR / Online Payment</span>
+            <select
+              value={form.qrPaymentRequired ? 'yes' : 'no'}
+              onChange={(e) => setForm((f) => ({ ...f, qrPaymentRequired: e.target.value === 'yes' }))}
+            >
+              <option value="yes">Required — client self-pays via QR</option>
+              <option value="no">Not required — I'll record payments manually</option>
             </select>
           </label>
           <button type="submit">Save Changes</button>

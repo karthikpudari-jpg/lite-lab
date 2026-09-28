@@ -37,6 +37,7 @@ function formatDate(d) {
 // pending/expired) does not, matching the "access stays blocked" business rule.
 export default function PaymentPendingModal({ dismissible = false, onClose }) {
   const { auth, markPaid } = useAuth();
+  const qrRequired = auth?.client?.qrPaymentRequired !== false;
   const isTopUp = dismissible;
   const monthOptions = isTopUp ? TOPUP_MONTH_OPTIONS : BLOCKED_MONTH_OPTIONS;
   const [months, setMonths] = useState(1);
@@ -132,7 +133,14 @@ export default function PaymentPendingModal({ dismissible = false, onClose }) {
           )}
         </p>
 
-        {!order && (
+        {!qrRequired && (
+          <p style={{ color: '#64748b' }}>
+            Online payment isn&apos;t set up for your account. Your account manager handles this directly - please
+            contact them to complete payment. Access will unlock automatically as soon as it&apos;s recorded.
+          </p>
+        )}
+
+        {qrRequired && !order && (
           <>
             <label style={{ display: 'block', textAlign: 'left', marginBottom: 12 }}>
               <span style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Pay for</span>

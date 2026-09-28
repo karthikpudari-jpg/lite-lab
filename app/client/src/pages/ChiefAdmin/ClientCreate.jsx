@@ -16,7 +16,7 @@ function todayISO() {
 export default function ClientCreate() {
   const [form, setForm] = useState({
     clientName: '', mobile: '', email: '', address: '', salesPerson: '', marketingPersonPrice: '0',
-    startDate: todayISO(), endDate: '',
+    startDate: todayISO(), endDate: '', qrPaymentRequired: true,
   });
   const [userCount, setUserCount] = useState(1);
   const [userRows, setUserRows] = useState([blankUser()]);
@@ -150,6 +150,12 @@ export default function ClientCreate() {
           </label>
           <label><span>Number of Users</span>
             <input type="number" min={1} max={20} value={userCount} onChange={(e) => handleUserCountChange(e.target.value)} />
+          </label>
+          <label><span>QR / Online Payment</span>
+            <select value={form.qrPaymentRequired ? 'yes' : 'no'} onChange={(e) => update('qrPaymentRequired', e.target.value === 'yes')}>
+              <option value="yes">Required — client self-pays via QR</option>
+              <option value="no">Not required — I'll record payments manually</option>
+            </select>
           </label>
           <div>
             <span style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13 }}>Monthly Subscription Amount</span>

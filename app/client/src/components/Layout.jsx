@@ -206,7 +206,7 @@ export function AppLayout() {
           </div>
           <TopbarClock />
           <div className="topbar-right">
-            {!paymentRequired && (
+            {!paymentRequired && auth?.client?.qrPaymentRequired !== false && (
               <button className="secondary" onClick={() => setShowPaymentModal(true)}>Pay in Advance</button>
             )}
             <TopbarUser name={auth?.user?.username} meta={roles.join(' + ')} />

@@ -89,6 +89,7 @@ async function clientUserLogin(req, res) {
       clientName: client.clientName,
       paymentStatus,
       allowBillCancellationRefund: client.allowBillCancellationRefund,
+      qrPaymentRequired: client.qrPaymentRequired,
     },
   });
 }
