@@ -142,6 +142,10 @@ export default function FrontDesk() {
       setError('Payment Mode is required.');
       return;
     }
+    if (isCredit && !payorId) {
+      setError('Please select a payor for credit billing.');
+      return;
+    }
     if (discountGiven && !remarks.trim()) {
       setError('Remarks are required when a discount is given.');
       return;

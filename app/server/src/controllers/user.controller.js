@@ -1,6 +1,10 @@
+const fs = require('fs');
+const path = require('path');
 const bcrypt = require('bcryptjs');
 const { ClientUser, Role, Client } = require('../models');
 const { calculatePlanAmount } = require('../utils/pricing');
+
+const UPLOAD_ROOT = path.join(__dirname, '..', '..', 'uploads');
 
 async function resolveRoles(roleNames) {
   const roles = await Role.findAll({ where: { name: roleNames } });
@@ -11,10 +15,10 @@ async function resolveRoles(roleNames) {
 }
 
 // POST /api/clients/:clientId/users  (Chief Admin or client ADMIN)
-// Body: { username, password, name, email, mobile, roleNames: ['FRONT_OFFICE', 'LAB_USER'] }
+// Body: { username, password, name, email, mobile, department, designation, roleNames: ['FRONT_OFFICE', 'LAB_USER'] }
 async function createUser(req, res) {
   const { clientId } = req.params;
-  const { username, password, name, email, mobile, roleNames } = req.body;
+  const { username, password, name, email, mobile, department, designation, roleNames } = req.body;
   const roleList = Array.isArray(roleNames) ? roleNames : (req.body.roleName ? [req.body.roleName] : []);
 
   if (!username || !password || roleList.length === 0) {
@@ -35,7 +39,7 @@ async function createUser(req, res) {
   if (existing) return res.status(409).json({ message: 'Username already exists for this client' });
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const user = await ClientUser.create({ clientId, username, passwordHash, name, email, mobile });
+  const user = await ClientUser.create({ clientId, username, passwordHash, name, email, mobile, department, designation });
   await user.setRoles(roles);
 
   // Basic plan covers 2 users at ₹1500/month; each user beyond that adds ₹500/month,
@@ -64,8 +68,8 @@ async function updateUser(req, res) {
   const user = await ClientUser.findOne({ where: { id: req.params.userId, clientId: req.params.clientId } });
   if (!user) return res.status(404).json({ message: 'User not found' });
 
-  const { name, email, mobile, active, roleNames, password } = req.body;
-  const updates = { name, email, mobile, active };
+  const { name, email, mobile, department, designation, active, roleNames, password } = req.body;
+  const updates = { name, email, mobile, department, designation, active };
 
   if (Array.isArray(roleNames)) {
     if (roleNames.length === 0) return res.status(400).json({ message: 'At least one role is required' });
@@ -83,4 +87,21 @@ async function updateUser(req, res) {
   return res.json({ id: user.id, username: user.username });
 }
 
-module.exports = { createUser, listUsers, updateUser };
+// POST /api/clients/:clientId/users/:userId/signature  (multipart: signature)
+async function uploadSignature(req, res) {
+  const user = await ClientUser.findOne({ where: { id: req.params.userId, clientId: req.params.clientId } });
+  if (!user) return res.status(404).json({ message: 'User not found' });
+  if (!req.file) return res.status(400).json({ message: 'A signature image file is required' });
+
+  const dir = path.join(UPLOAD_ROOT, String(req.params.clientId));
+  fs.mkdirSync(dir, { recursive: true });
+  const ext = path.extname(req.file.originalname) || '.png';
+  const filename = `signature-${user.id}${ext}`;
+  fs.writeFileSync(path.join(dir, filename), req.file.buffer);
+
+  const signaturePath = `/uploads/${req.params.clientId}/${filename}`;
+  await user.update({ signaturePath });
+  return res.json({ signaturePath });
+}
+
+module.exports = { createUser, listUsers, updateUser, uploadSignature };

@@ -571,6 +571,18 @@ input, select, textarea {
 }
 .review-footer .checked-count { font-size: 13px; color: #64748b; }
 
+/* Below this, the fixed 240px sidebar would eat most of a phone screen, and
+   the parameter card's fixed-width input was squeezing .p-name down to
+   nothing with no room to show the name at all. */
+@media (max-width: 768px) {
+  .review-body { flex-direction: column; }
+  .review-sidebar { width: 100%; max-height: 140px; border-right: none; border-bottom: 1px solid #e2e8f0; }
+  .review-main { padding: 16px; }
+  .review-param-card { flex-wrap: wrap; }
+  .review-param-card .p-name { flex: 1 1 100%; min-width: 0; }
+  .review-footer { padding: 14px 16px; flex-wrap: wrap; gap: 8px; }
+}
+
 /* Test Parameters screen: a searchable/filterable test list on the left,
    the selected test's parameters (with their normal-range pills) on the
    right - test creation and parameter creation both happen on this one page. */

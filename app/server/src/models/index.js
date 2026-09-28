@@ -175,6 +175,9 @@ const ClientUser = sequelize.define('ClientUser', {
   name: { type: DataTypes.STRING },
   email: { type: DataTypes.STRING },
   mobile: { type: DataTypes.STRING },
+  department: { type: DataTypes.STRING },
+  designation: { type: DataTypes.STRING },
+  signaturePath: { type: DataTypes.STRING },
   active: { type: DataTypes.BOOLEAN, defaultValue: true },
   // Identifies this account's one currently-valid login session - set at
   // login and stamped into the JWT, so logging in again elsewhere evicts

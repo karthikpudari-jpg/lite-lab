@@ -16,8 +16,10 @@ export default function ClientDetail() {
   const [prices, setPrices] = useState([]);
   const [marketingPersons, setMarketingPersons] = useState([]);
   const [priceForm, setPriceForm] = useState({ testId: '', price: '' });
-  const [newUser, setNewUser] = useState({ username: '', password: '', name: '', roleNames: ['FRONT_OFFICE'] });
+  const [newUser, setNewUser] = useState({ username: '', password: '', name: '', department: '', designation: '', roleNames: ['FRONT_OFFICE'] });
   const [userRoleEdits, setUserRoleEdits] = useState({});
+  const [userProfileEdits, setUserProfileEdits] = useState({}); // { [userId]: { department, designation } }
+  const [signatureUploading, setSignatureUploading] = useState(null); // userId currently uploading
   const [saveMessage, setSaveMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -86,7 +88,7 @@ export default function ClientDetail() {
     }
     try {
       await api.post(`/clients/${id}/users`, newUser);
-      setNewUser({ username: '', password: '', name: '', roleNames: ['FRONT_OFFICE'] });
+      setNewUser({ username: '', password: '', name: '', department: '', designation: '', roleNames: ['FRONT_OFFICE'] });
       load();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create user');
@@ -109,6 +111,40 @@ export default function ClientDetail() {
       load();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to update roles');
+    }
+  }
+
+  function profileForUser(u) {
+    return userProfileEdits[u.id] ?? { department: u.department || '', designation: u.designation || '' };
+  }
+
+  async function handleSaveUserProfile(userId) {
+    setError('');
+    const profile = userProfileEdits[userId];
+    try {
+      await api.put(`/clients/${id}/users/${userId}`, profile);
+      setUserProfileEdits((edits) => { const next = { ...edits }; delete next[userId]; return next; });
+      load();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update department/designation');
+    }
+  }
+
+  async function handleUploadSignature(userId, file) {
+    if (!file) return;
+    setError('');
+    setSignatureUploading(userId);
+    try {
+      const formData = new FormData();
+      formData.append('signature', file);
+      await api.post(`/clients/${id}/users/${userId}/signature`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      load();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to upload signature');
+    } finally {
+      setSignatureUploading(null);
     }
   }
 
@@ -218,28 +254,57 @@ export default function ClientDetail() {
           <label><span>Username</span><input value={newUser.username} onChange={(e) => setNewUser((f) => ({ ...f, username: e.target.value }))} required /></label>
           <label><span>Name</span><input value={newUser.name} onChange={(e) => setNewUser((f) => ({ ...f, name: e.target.value }))} /></label>
           <label><span>Password</span><input type="password" value={newUser.password} onChange={(e) => setNewUser((f) => ({ ...f, password: e.target.value }))} required /></label>
+          <label><span>Department</span><input value={newUser.department} onChange={(e) => setNewUser((f) => ({ ...f, department: e.target.value }))} placeholder="e.g. Laboratory" /></label>
+          <label><span>Designation</span><input value={newUser.designation} onChange={(e) => setNewUser((f) => ({ ...f, designation: e.target.value }))} placeholder="e.g. Lab Technician" /></label>
           <div><span>Roles</span>
             <RoleCheckboxes value={newUser.roleNames} onChange={(roleNames) => setNewUser((f) => ({ ...f, roleNames }))} />
           </div>
           <button type="submit">Add User</button>
         </form>
         <table>
-          <thead><tr><th>Username</th><th>Name</th><th>Roles</th><th>Active</th><th></th></tr></thead>
+          <thead><tr><th>Username</th><th>Name</th><th>Department</th><th>Designation</th><th>Signature</th><th>Roles</th><th>Active</th><th></th></tr></thead>
           <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td>{u.username}</td>
-                <td>{u.name}</td>
-                <td style={{ minWidth: 320 }}>
-                  <RoleCheckboxes value={rolesForUser(u)} onChange={(roleNames) => setUserRoleEdits((edits) => ({ ...edits, [u.id]: roleNames }))} />
-                </td>
-                <td>{u.active ? 'Yes' : 'No'}</td>
-                <td>
-                  {userRoleEdits[u.id] && <button type="button" onClick={() => handleSaveUserRoles(u.id)}>Save Roles</button>}
-                </td>
-              </tr>
-            ))}
-            {users.length === 0 && <tr><td colSpan={5}>No users yet.</td></tr>}
+            {users.map((u) => {
+              const profile = profileForUser(u);
+              const profileDirty = !!userProfileEdits[u.id];
+              return (
+                <tr key={u.id}>
+                  <td>{u.username}</td>
+                  <td>{u.name}</td>
+                  <td>
+                    <input
+                      style={{ width: 120 }}
+                      value={profile.department}
+                      onChange={(e) => setUserProfileEdits((edits) => ({ ...edits, [u.id]: { ...profile, department: e.target.value } }))}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      style={{ width: 120 }}
+                      value={profile.designation}
+                      onChange={(e) => setUserProfileEdits((edits) => ({ ...edits, [u.id]: { ...profile, designation: e.target.value } }))}
+                    />
+                  </td>
+                  <td>
+                    {u.signaturePath && <img src={u.signaturePath} alt="Signature" style={{ height: 24, display: 'block', marginBottom: 4 }} />}
+                    <input
+                      type="file" accept="image/*" style={{ width: 130, fontSize: 11 }}
+                      disabled={signatureUploading === u.id}
+                      onChange={(e) => handleUploadSignature(u.id, e.target.files[0])}
+                    />
+                  </td>
+                  <td style={{ minWidth: 320 }}>
+                    <RoleCheckboxes value={rolesForUser(u)} onChange={(roleNames) => setUserRoleEdits((edits) => ({ ...edits, [u.id]: roleNames }))} />
+                  </td>
+                  <td>{u.active ? 'Yes' : 'No'}</td>
+                  <td style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {userRoleEdits[u.id] && <button type="button" onClick={() => handleSaveUserRoles(u.id)}>Save Roles</button>}
+                    {profileDirty && <button type="button" onClick={() => handleSaveUserProfile(u.id)}>Save Dept/Designation</button>}
+                  </td>
+                </tr>
+              );
+            })}
+            {users.length === 0 && <tr><td colSpan={8}>No users yet.</td></tr>}
           </tbody>
         </table>
       </div>

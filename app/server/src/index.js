@@ -48,6 +48,9 @@ async function start() {
   await sequelize.query("ALTER TABLE parameter_normal_range ADD COLUMN IF NOT EXISTS \"ageUnit\" VARCHAR(255) DEFAULT 'Years'");
   await sequelize.query("ALTER TABLE bill ADD COLUMN IF NOT EXISTS \"visitType\" VARCHAR(255) DEFAULT 'WALK-IN'");
   await sequelize.query("ALTER TABLE bill ADD COLUMN IF NOT EXISTS \"priority\" VARCHAR(255) DEFAULT 'ROUTINE'");
+  await sequelize.query('ALTER TABLE client_user ADD COLUMN IF NOT EXISTS department VARCHAR(255)');
+  await sequelize.query('ALTER TABLE client_user ADD COLUMN IF NOT EXISTS designation VARCHAR(255)');
+  await sequelize.query("ALTER TABLE client_user ADD COLUMN IF NOT EXISTS \"signaturePath\" VARCHAR(255)");
   await expireOverdueSubscriptions();
   setInterval(() => {
     expireOverdueSubscriptions().catch((err) => console.error('expireOverdueSubscriptions failed:', err));

@@ -26,6 +26,7 @@ router.get('/:clientId/subscriptions/current', subCtrl.getCurrentSubscription);
 router.post('/:clientId/users', userCtrl.createUser);
 router.get('/:clientId/users', userCtrl.listUsers);
 router.put('/:clientId/users/:userId', userCtrl.updateUser);
+router.post('/:clientId/users/:userId/signature', upload.single('signature'), userCtrl.uploadSignature);
 
 router.get('/:clientId/test-prices', priceCtrl.listPrices);
 router.put('/:clientId/test-prices', priceCtrl.setPrice);

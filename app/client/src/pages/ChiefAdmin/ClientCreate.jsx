@@ -6,7 +6,7 @@ import SearchSelect from '../../components/SearchSelect';
 import { calculatePlanAmount, BASE_USER_COUNT, BASE_MONTHLY_AMOUNT, EXTRA_USER_AMOUNT } from '../../utils/pricing';
 
 function blankUser() {
-  return { username: '', password: '', name: '', roleNames: ['FRONT_OFFICE'] };
+  return { username: '', password: '', name: '', department: '', designation: '', roleNames: ['FRONT_OFFICE'] };
 }
 
 function todayISO() {
@@ -173,6 +173,12 @@ export default function ClientCreate() {
             </label>
             <label><span>Password</span>
               <input type="password" value={u.password} onChange={(e) => updateUserRow(i, 'password', e.target.value)} required />
+            </label>
+            <label><span>Department</span>
+              <input value={u.department} onChange={(e) => updateUserRow(i, 'department', e.target.value)} placeholder="e.g. Laboratory" />
+            </label>
+            <label><span>Designation</span>
+              <input value={u.designation} onChange={(e) => updateUserRow(i, 'designation', e.target.value)} placeholder="e.g. Lab Technician" />
             </label>
             <div><span>Roles</span>
               <RoleCheckboxes value={u.roleNames} onChange={(roleNames) => updateUserRow(i, 'roleNames', roleNames)} />

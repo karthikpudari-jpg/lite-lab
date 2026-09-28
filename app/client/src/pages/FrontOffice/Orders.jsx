@@ -5,6 +5,15 @@ import { useAuth } from '../../context/AuthContext';
 
 const REFUND_MODES = ['Cash', 'Card', 'UPI', 'Insurance'];
 
+function daysAgoISO(days) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export default function Orders() {
   const navigate = useNavigate();
   const { auth } = useAuth();
@@ -17,8 +26,10 @@ export default function Orders() {
 
   const [bills, setBills] = useState([]);
   const [search, setSearch] = useState('');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
+  // Defaults to the last 7 days so the list isn't every order ever placed -
+  // "Clear dates" (below) drops the filter to show everything.
+  const [fromDate, setFromDate] = useState(() => daysAgoISO(7));
+  const [toDate, setToDate] = useState(() => todayISO());
   const [refundBill, setRefundBill] = useState(null); // the bill row being cancelled/refunded
   const [refundItem, setRefundItem] = useState(null); // which test within that bill
   const [refundForm, setRefundForm] = useState({ amount: '', mode: 'Cash', reason: '' });
@@ -224,8 +235,8 @@ export default function Orders() {
       </table>
 
       {showSettings && (
-        <div className="modal-overlay">
-          <div className="modal-card" style={{ maxWidth: 460 }}>
+        <div className="modal-overlay" onClick={() => setShowSettings(false)}>
+          <div className="modal-card" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
             <h2>Orders Settings</h2>
             <p style={{ fontSize: 13, color: '#64748b' }}>
               Available to Admin and Manager. Controls cancellation/refund and post-billing discount for
@@ -307,8 +318,8 @@ export default function Orders() {
       )}
 
       {refundBill && (
-        <div className="modal-overlay">
-          <div className="modal-card" style={{ maxWidth: 560 }}>
+        <div className="modal-overlay" onClick={() => setRefundBill(null)}>
+          <div className="modal-card" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
             <h2>Cancel / Refund — {refundBill.billNo}</h2>
             <p style={{ fontSize: 13, color: '#64748b' }}>
               Cancelling a test is per-test - the rest of the bill's tests are unaffected. A refund can be
@@ -380,8 +391,8 @@ export default function Orders() {
       )}
 
       {discountBill && (
-        <div className="modal-overlay">
-          <div className="modal-card" style={{ maxWidth: 480 }}>
+        <div className="modal-overlay" onClick={() => setDiscountBill(null)}>
+          <div className="modal-card" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
             <h2>Discount — {discountBill.billNo}</h2>
             <p style={{ fontSize: 13, color: '#64748b' }}>
               Applies an extra discount to this bill after billing, on top of any discount already given.

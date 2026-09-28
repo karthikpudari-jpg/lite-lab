@@ -134,6 +134,7 @@ async function createClient(req, res) {
         const passwordHash = await bcrypt.hash(u.password, 10);
         const created = await ClientUser.create({
           clientId: client.id, username: u.username, passwordHash, name: u.name,
+          department: u.department, designation: u.designation,
         }, { transaction: t });
         await created.setRoles(roles, { transaction: t });
         createdUsers.push({ id: created.id, username: created.username, roles: roles.map((r) => r.name) });
