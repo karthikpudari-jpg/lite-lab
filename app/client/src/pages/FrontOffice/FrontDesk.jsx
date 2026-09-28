@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import api from '../../api/client';
-import { Icon } from '../../components/Icons';
 import SearchSelect from '../../components/SearchSelect';
+import BillReceiptSheet from '../../components/BillReceiptSheet';
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -204,27 +204,12 @@ export default function FrontDesk() {
 
   if (bill) {
     return (
-      <div className="card">
-        <h3 className="section-heading"><span className="icon-badge"><Icon name="orders" size={16} /></span> Receipt — Order {bill.billNo}</h3>
-        <p>UMR: <strong>{bill.Patient?.umr}</strong> · Patient: {bill.Patient?.name}</p>
-        {bill.ReferralDoctor?.name && <p>Referred By: Dr. {bill.ReferralDoctor.name}</p>}
-        {bill.Payor?.name && <p>Billed To Credit Client: <strong>{bill.Payor.name}</strong></p>}
-        {bill.transactionNumber && <p>Payment Transaction Number: <strong>{bill.transactionNumber}</strong></p>}
-        <table>
-          <thead><tr><th>Test</th><th>Barcode</th><th>Price</th></tr></thead>
-          <tbody>
-            {bill.BillItems.map((item) => (
-              <tr key={item.id}>
-                <td>{item.TestMaster?.testName}</td>
-                <td>{item.Sample?.barcode}</td>
-                <td>₹{item.price}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <p>Gross: ₹{bill.totalAmount} &nbsp; Discount: ₹{bill.discount} &nbsp; <strong>Net Payable: ₹{bill.paidAmount}</strong></p>
-        <button onClick={() => window.print()}>Print Bill</button>{' '}
-        <button className="secondary" onClick={startNewBill}>New Bill</button>
+      <div>
+        <div className="no-print" style={{ marginBottom: 16, display: 'flex', gap: 8 }}>
+          <button onClick={() => window.print()}>Print Bill</button>
+          <button className="secondary" onClick={startNewBill}>New Bill</button>
+        </div>
+        <BillReceiptSheet bill={bill} />
       </div>
     );
   }
