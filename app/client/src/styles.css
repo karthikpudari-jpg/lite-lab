@@ -204,6 +204,15 @@ input, select, textarea {
   grid-template-columns: minmax(0, 1.1fr) minmax(320px, 1fr);
   background: #f4f6f8;
 }
+/* Grid items default to min-width: auto, which means their own content (the
+   "HMS / LIMS" mark, the heading's longest word, etc.) sets a floor the
+   track can't shrink below even though minmax(0, ...) says it can - between
+   ~861px and ~1000px wide (just above the breakpoint that hides .login-brand
+   entirely) that floor was wider than the track's computed width, so the
+   brand panel's content overflowed into the login form panel instead of
+   shrinking to fit. min-width: 0 lets each column actually honor its track
+   width and wrap/truncate its own content instead. */
+.login-brand, .login-panel { min-width: 0; }
 .login-brand {
   position: relative;
   overflow: hidden;
@@ -326,12 +335,21 @@ input, select, textarea {
   .login-brand { display: none; }
 }
 .modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100;
+  /* Higher than .topbar's z-index: 101 - otherwise the topbar (date pill,
+     Pay in Advance, Logout) renders on top of every modal in the app. */
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 150;
 }
 .modal-card {
+  position: relative;
   background: #fff; padding: 28px; border-radius: 12px; width: 380px; text-align: center;
   max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); overflow-y: auto;
 }
+.modal-close-btn {
+  position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border-radius: 999px;
+  background: #f1f5f9; color: #475569; border: none; display: flex; align-items: center; justify-content: center;
+  font-size: 16px; line-height: 1; cursor: pointer; padding: 0;
+}
+.modal-close-btn:hover { background: #e2e8f0; }
 .modal-card h2 { margin-top: 0; }
 .qr-box {
   width: 180px; height: 180px; margin: 16px auto; background: #f1f5f9; display: flex; align-items: center; justify-content: center;
@@ -520,14 +538,19 @@ input, select, textarea {
 .review-select-all {
   display: flex; align-items: center; gap: 8px; padding: 8px 6px; font-size: 12px; font-weight: 700;
   letter-spacing: 0.04em; color: #475569; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; margin-bottom: 8px;
+  white-space: nowrap;
 }
 .review-select-all .count { margin-left: auto; color: #94a3b8; font-weight: 600; }
+.review-select-all input[type='checkbox'], .review-test-row input[type='checkbox'] {
+  width: 16px; height: 16px; flex-shrink: 0; accent-color: #2563eb; cursor: pointer;
+}
 .review-test-row {
   display: flex; align-items: flex-start; gap: 8px; padding: 10px 8px; border-radius: 8px; cursor: pointer;
   margin-top: 6px;
 }
 .review-test-row:hover { background: #f8fafc; }
 .review-test-row.active { background: #eef2ff; }
+.review-test-row > div { flex: 1; min-width: 0; text-align: left; }
 .review-test-row .name { font-weight: 700; font-size: 13px; color: #1a1a1a; }
 .review-test-row.active .name { color: #4338ca; }
 .review-test-row .count-pill {
@@ -620,4 +643,16 @@ input, select, textarea {
   .main-content { padding: 0 !important; }
   .app-shell { display: block !important; }
   .report-sheet { box-shadow: none; max-width: 100%; }
+}
+
+/* A bill receipt/lab report viewed (not printed) on a phone - the fixed
+   32px padding and multi-column tables (Test/Barcode/Price/Status/Refunded,
+   or Test/Value/Unit/Range) were overflowing a narrow screen with no way to
+   see the cut-off columns. Scrolling the table itself horizontally, rather
+   than the whole page, keeps the header/patient-grid readable while still
+   letting every column be reached. */
+@media (max-width: 640px) {
+  .report-sheet { padding: 16px; }
+  .report-sheet table { display: block; overflow-x: auto; white-space: nowrap; }
+  .report-header { flex-wrap: wrap; }
 }

@@ -19,7 +19,7 @@ export default function Orders() {
   const { auth } = useAuth();
   const canConfigure = auth?.user?.roles?.includes('ADMIN') || auth?.user?.roles?.includes('MANAGER');
   const [settings, setSettings] = useState(null); // { allowBillCancellationRefund, refundAllowedDays, allowPostBillingDiscount, postDiscountAllowedDays }
-  const [settingsForm, setSettingsForm] = useState({ refundAllowedDays: '0', postDiscountAllowedDays: '0' });
+  const [settingsForm, setSettingsForm] = useState({ refundAllowedDays: '0', postDiscountAllowedDays: '0', defaultGstPercent: '0' });
   const [showSettings, setShowSettings] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState('');
@@ -52,6 +52,7 @@ export default function Orders() {
     setSettingsForm({
       refundAllowedDays: String(data.refundAllowedDays ?? 0),
       postDiscountAllowedDays: String(data.postDiscountAllowedDays ?? 0),
+      defaultGstPercent: String(data.defaultGstPercent ?? 0),
     });
   }
   useEffect(() => { load(); loadSettings(); }, []);
@@ -253,6 +254,7 @@ export default function Orders() {
       {showSettings && (
         <div className="modal-overlay" onClick={() => setShowSettings(false)}>
           <div className="modal-card" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="modal-close-btn" onClick={() => setShowSettings(false)} aria-label="Close">×</button>
             <h2>Orders Settings</h2>
             <p style={{ fontSize: 13, color: '#64748b' }}>
               Available to Admin and Manager. Controls cancellation/refund and post-billing discount for
@@ -319,6 +321,26 @@ export default function Orders() {
                       type="number" min="0" step="1" style={{ width: 70 }}
                       value={settingsForm.postDiscountAllowedDays}
                       onChange={(e) => setSettingsForm((f) => ({ ...f, postDiscountAllowedDays: e.target.value }))}
+                    />
+                    <button type="submit" disabled={settingsSaving}>Save</button>
+                  </div>
+                </form>
+
+                <form
+                  onSubmit={(e) => saveDaysLimit(e, 'defaultGstPercent', 'Default GST %')}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}
+                >
+                  <div>
+                    <strong>Default GST %</strong>
+                    <div style={{ fontSize: 12, color: '#64748b' }}>
+                      Pre-fills GST on every new bill (split evenly into CGST + SGST). 0 = no tax charged.
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      type="number" min="0" max="100" step="0.01" style={{ width: 70 }}
+                      value={settingsForm.defaultGstPercent}
+                      onChange={(e) => setSettingsForm((f) => ({ ...f, defaultGstPercent: e.target.value }))}
                     />
                     <button type="submit" disabled={settingsSaving}>Save</button>
                   </div>
