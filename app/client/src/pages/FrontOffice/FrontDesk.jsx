@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import api from '../../api/client';
 import SearchSelect from '../../components/SearchSelect';
 import BillReceiptSheet from '../../components/BillReceiptSheet';
+import ShareButton from '../../components/ShareButton';
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -42,6 +43,7 @@ export default function FrontDesk() {
   const [visitType, setVisitType] = useState('WALK-IN');
   const [priority, setPriority] = useState('ROUTINE');
   const [discount, setDiscount] = useState('0');
+  const [gstPercent, setGstPercent] = useState('0');
   const [hasDue, setHasDue] = useState(false); // patient pays only part now, rest recovered later
   const [amountCollected, setAmountCollected] = useState('');
   const [paymentMode, setPaymentMode] = useState('');
@@ -60,6 +62,7 @@ export default function FrontDesk() {
     api.get('/billing/test-prices').then((r) => setPrices(r.data));
     api.get('/doctors').then((r) => setDoctors(r.data));
     api.get('/billing/payors').then((r) => setPayors(r.data));
+    api.get('/billing-settings').then((r) => setGstPercent(String(r.data.defaultGstPercent ?? 0)));
   }, []);
 
   useEffect(() => {
@@ -96,7 +99,7 @@ export default function FrontDesk() {
       setSearchMessage(`Existing patient found — ${data.umr}`);
     } catch (err) {
       setPatient(null);
-      setPatientForm({ ...blankPatientForm(), mobile: isUmr ? '' : searchValue.trim() });
+      setPatientForm({ ...blankPatientForm(), mobile: isUmr ? '' : searchValue.trim().replace(/\D/g, '').slice(0, 10) });
       setSearchMessage('No existing patient found — enter details below to register.');
     }
   }
@@ -134,7 +137,11 @@ export default function FrontDesk() {
   ));
 
   const gross = selectedPrices.reduce((s, p) => s + effectivePrice(p), 0);
-  const netPayable = Math.max(0, gross - (Number(discount) || 0));
+  const taxableAmount = Math.max(0, gross - (Number(discount) || 0));
+  const taxAmount = Math.round(taxableAmount * (Number(gstPercent) || 0)) / 100;
+  const cgstAmount = Math.round(taxAmount * 50) / 100;
+  const sgstAmount = Math.round((taxAmount - cgstAmount) * 100) / 100;
+  const netPayable = taxableAmount + taxAmount;
   // Full amount by default (unchanged behaviour); "record a due balance" lets
   // less than netPayable be collected now, the rest recovered later from
   // Orders. Doesn't apply to credit billing - a payor bill is never "due"
@@ -171,6 +178,7 @@ export default function FrontDesk() {
         visitType,
         priority,
         discount: Number(discount) || 0,
+        gstPercent: Number(gstPercent) || 0,
         paymentMode: isCredit ? undefined : paymentMode,
         visitAddress,
         transactionNumber: needsTransactionNumber ? transactionNumber : undefined,
@@ -203,6 +211,7 @@ export default function FrontDesk() {
     setDoctorName('');
     setPayorId('');
     setDiscount('0');
+    api.get('/billing-settings').then((r) => setGstPercent(String(r.data.defaultGstPercent ?? 0)));
     setHasDue(false);
     setAmountCollected('');
     setPaymentMode('');
@@ -218,6 +227,7 @@ export default function FrontDesk() {
       <div>
         <div className="no-print" style={{ marginBottom: 16, display: 'flex', gap: 8 }}>
           <button onClick={() => window.print()}>Print Bill</button>
+          <ShareButton apiPath={`/billing/bills/${bill.id}/share`} />
           <button className="secondary" onClick={startNewBill}>New Bill</button>
         </div>
         <BillReceiptSheet bill={bill} />
@@ -384,6 +394,10 @@ export default function FrontDesk() {
             <div className="label">Discount</div>
             <input type="number" min={0} value={discount} onChange={(e) => setDiscount(e.target.value)} style={{ textAlign: 'center' }} />
           </div>
+          <div className="pay-stat-tile discount">
+            <div className="label">GST %</div>
+            <input type="number" min={0} max={100} step="0.01" value={gstPercent} onChange={(e) => setGstPercent(e.target.value)} style={{ textAlign: 'center' }} />
+          </div>
           <div className="pay-stat-tile net-payable"><div className="label">Net Payable</div><div className="value">₹{netPayable}</div></div>
         </div>
       </div>
@@ -394,6 +408,13 @@ export default function FrontDesk() {
         <div className="review-box">
           <div className="review-box-row"><span>Patient</span><span>{patient?.name || patientForm.name || '—'}</span></div>
           <div className="review-box-row"><span>Items</span><span>{selectedPrices.length} item(s)</span></div>
+          {taxAmount > 0 && (
+            <>
+              <div className="review-box-row"><span>Taxable Amount</span><span>₹{taxableAmount}</span></div>
+              <div className="review-box-row"><span>CGST ({(Number(gstPercent) || 0) / 2}%)</span><span>₹{cgstAmount}</span></div>
+              <div className="review-box-row"><span>SGST ({(Number(gstPercent) || 0) / 2}%)</span><span>₹{sgstAmount}</span></div>
+            </>
+          )}
           <div className="review-box-row"><span>Net Payable</span><span>₹{netPayable}</span></div>
         </div>
 
