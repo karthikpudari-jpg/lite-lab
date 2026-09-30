@@ -55,6 +55,16 @@ export function AuthProvider({ children }) {
     return data;
   }
 
+  // Chief Admin opening a client's app directly, without that client's
+  // clientCode/password - swaps the Chief Admin session for a client one, so
+  // the caller should navigate to /app right after this resolves.
+  async function impersonateClient(clientId) {
+    const { data } = await api.post(`/clients/${clientId}/impersonate`);
+    persist(data);
+    if (data.client?.paymentStatus !== 'PAID') setPaymentRequired(true);
+    return data;
+  }
+
   function markPaid() {
     if (!auth) return;
     // lastPaymentAt always changes, even when paymentStatus was already PAID
@@ -78,6 +88,7 @@ export function AuthProvider({ children }) {
     clearSessionMessage,
     loginChiefAdmin,
     loginClientUser,
+    impersonateClient,
     logout,
     markPaid,
   }), [auth, paymentRequired, sessionMessage]);

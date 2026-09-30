@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../../api/client';
 import RoleCheckboxes from '../../components/RoleCheckboxes';
 import SearchSelect from '../../components/SearchSelect';
 import { SCREEN_CATALOG } from '../../components/Layout';
 import { calculatePlanAmount } from '../../utils/pricing';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ClientDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { impersonateClient } = useAuth();
+  const [loginAsBusy, setLoginAsBusy] = useState(false);
   const [client, setClient] = useState(null);
   const [form, setForm] = useState(null);
   const [users, setUsers] = useState([]);
@@ -30,6 +34,7 @@ export default function ClientDetail() {
   const [manualPaymentSaving, setManualPaymentSaving] = useState(false);
   const [manualPaymentMessage, setManualPaymentMessage] = useState('');
   const [manualPaymentError, setManualPaymentError] = useState('');
+  const [revenue, setRevenue] = useState(null);
 
   // Role -> screen access for this client's own staff - `defaults` is the
   // platform-wide ceiling (read-only here, set on Role Screen Defaults),
@@ -41,17 +46,19 @@ export default function ClientDetail() {
   const [roleScreenError, setRoleScreenError] = useState('');
 
   async function load() {
-    const [clientRes, testsRes, pricesRes, marketingRes, roleScreensRes] = await Promise.all([
+    const [clientRes, testsRes, pricesRes, marketingRes, roleScreensRes, revenueRes] = await Promise.all([
       api.get(`/clients/${id}`),
       api.get('/admin/masters/tests'),
       api.get(`/clients/${id}/test-prices`),
       api.get('/clients/marketing-persons'),
       api.get(`/clients/${id}/role-screens`),
+      api.get(`/clients/${id}/revenue`),
     ]);
     setMarketingPersons(marketingRes.data);
     setRoleScreenRoles(roleScreensRes.data.roles);
     setRoleScreenDefaults(roleScreensRes.data.defaults);
     setRoleScreenEffective(roleScreensRes.data.effective);
+    setRevenue(revenueRes.data);
     setClient(clientRes.data);
     setForm({
       clientName: clientRes.data.clientName,
@@ -85,6 +92,19 @@ export default function ClientDetail() {
       load();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to update client');
+    }
+  }
+
+  async function handleLoginAsClient() {
+    if (loginAsBusy) return; // guard against rapid double-click firing two impersonation requests
+    setError('');
+    setLoginAsBusy(true);
+    try {
+      await impersonateClient(id);
+      navigate('/app');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to log in as this client');
+      setLoginAsBusy(false);
     }
   }
 
@@ -239,7 +259,12 @@ export default function ClientDetail() {
       <p><Link to="/chief-admin">&larr; Back to Dashboard</Link></p>
 
       <div className="card">
-        <h3>Edit Client — {client.clientCode}</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <h3 style={{ margin: 0 }}>Edit Client — {client.clientCode}</h3>
+          <button type="button" onClick={handleLoginAsClient} disabled={loginAsBusy}>
+            {loginAsBusy ? 'Opening…' : 'Log In as This Client'}
+          </button>
+        </div>
         <form onSubmit={handleSaveClient} className="form-grid" style={{ alignItems: 'end' }}>
           <label><span>Client Name</span><input value={form.clientName} onChange={(e) => setForm((f) => ({ ...f, clientName: e.target.value }))} required /></label>
           <label><span>Mobile</span><input value={form.mobile} onChange={(e) => setForm((f) => ({ ...f, mobile: e.target.value }))} /></label>
@@ -338,6 +363,24 @@ export default function ClientDetail() {
         {manualPaymentMessage && <p style={{ color: '#166534' }}>{manualPaymentMessage}</p>}
         {manualPaymentError && <p className="error-text">{manualPaymentError}</p>}
       </div>
+
+      {revenue && (
+        <div className="card">
+          <h3>Lab Billing Revenue</h3>
+          <p style={{ fontSize: 13, color: '#64748b', marginTop: -8 }}>
+            Money this client has collected from their own patients through the app - separate from the monthly
+            subscription they pay you above.
+          </p>
+          <div className="stat-row">
+            <div className="stat-tile"><div className="value">{revenue.totalBillCount}</div><div className="label">Total Bills</div></div>
+            <div className="stat-tile"><div className="value">₹{revenue.totalRevenueCollected}</div><div className="label">Total Collected</div></div>
+            <div className="stat-tile"><div className="value">₹{revenue.totalDiscountGiven}</div><div className="label">Total Discount Given</div></div>
+            <div className="stat-tile"><div className="value">₹{revenue.totalDueOutstanding}</div><div className="label">Due Outstanding</div></div>
+            <div className="stat-tile"><div className="value">{revenue.thisMonthBillCount}</div><div className="label">Bills This Month</div></div>
+            <div className="stat-tile"><div className="value">₹{revenue.thisMonthRevenueCollected}</div><div className="label">Collected This Month</div></div>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <h3>Users</h3>

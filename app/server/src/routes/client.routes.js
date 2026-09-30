@@ -20,11 +20,16 @@ router.get('/marketing-persons', clientCtrl.listMarketingPersons);
 router.get('/next-code', clientCtrl.previewNextClientCode);
 router.get('/:id', clientCtrl.getClient);
 router.put('/:id', clientCtrl.updateClient);
+// Opens this client's app as their auto-provisioned support login - ADMIN
+// only, since it grants full access to that client's data without a password.
+router.post('/:id/impersonate', requireChiefAdminRole(CHIEF_ADMIN_ROLES.ADMIN), clientCtrl.impersonateClient);
 
 router.get('/:clientId/subscriptions', subCtrl.listSubscriptions);
 router.get('/:clientId/subscriptions/current', subCtrl.getCurrentSubscription);
 // A client that paid Chief Admin directly (outside the app) - ADMIN only, money-touching like role-screens below.
 router.post('/:clientId/manual-payment', requireChiefAdminRole(CHIEF_ADMIN_ROLES.ADMIN), paymentCtrl.recordManualPayment);
+// This client's lab-billing revenue (money collected from their own patients) - ADMIN only, same as other financial data.
+router.get('/:clientId/revenue', requireChiefAdminRole(CHIEF_ADMIN_ROLES.ADMIN), clientCtrl.getClientRevenue);
 
 router.post('/:clientId/users', userCtrl.createUser);
 router.get('/:clientId/users', userCtrl.listUsers);

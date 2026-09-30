@@ -1,8 +1,9 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const { Client, ClientSubscription, ClientUser, Role, ChiefAdmin, sequelize } = require('../models');
-const { Op } = require('sequelize');
+const { Client, ClientSubscription, ClientUser, Role, ChiefAdmin, Bill, sequelize } = require('../models');
+const { Op, fn, col } = require('sequelize');
 const { calculatePlanAmount } = require('../utils/pricing');
+const { signToken } = require('../utils/jwt');
 
 /**
  * Generates the next available Client Code, e.g. SG0001 (self-signup) or
@@ -207,6 +208,17 @@ async function listClients(req, res) {
     paidThroughByClient[c.id] = await getPaidThroughDate(c.id);
   }
 
+  // Lab-billing revenue (what each client has collected from their own
+  // patients), distinct from monthlyRevenue* above which is the SaaS
+  // subscription fee they pay us.
+  const billStats = await Bill.findAll({
+    attributes: ['clientId', [fn('COUNT', col('id')), 'billCount'], [fn('COALESCE', fn('SUM', col('paidAmount')), 0), 'revenueCollected']],
+    group: ['clientId'],
+    raw: true,
+  });
+  const billStatsByClient = {};
+  for (const row of billStats) billStatsByClient[row.clientId] = row;
+
   const summary = {
     total: clients.length,
     paid: clients.filter((c) => c.paymentStatus === 'PAID').length,
@@ -216,6 +228,8 @@ async function listClients(req, res) {
     monthlyRevenueCollected: clients
       .filter((c) => c.paymentStatus === 'PAID')
       .reduce((sum, c) => sum + Number(c.monthlyAmount), 0),
+    labBillCount: billStats.reduce((sum, r) => sum + Number(r.billCount), 0),
+    labRevenueCollected: billStats.reduce((sum, r) => sum + Number(r.revenueCollected), 0),
   };
 
   const data = clients.map((c) => ({
@@ -232,6 +246,8 @@ async function listClients(req, res) {
     userCount: c.ClientUsers?.length || 0,
     createdAt: c.createdAt,
     paidThrough: paidThroughByClient[c.id],
+    labBillCount: Number(billStatsByClient[c.id]?.billCount || 0),
+    labRevenueCollected: Number(billStatsByClient[c.id]?.revenueCollected || 0),
   }));
 
   return res.json({ summary, clients: data });
@@ -246,6 +262,96 @@ async function getClient(req, res) {
 
   const paidThrough = await getPaidThroughDate(client.id);
   return res.json({ ...client.toJSON(), paidThrough });
+}
+
+// POST /api/clients/:id/impersonate  (Chief Admin, ADMIN role only)
+// Opens this client's app for support/troubleshooting without a Chief Admin
+// ever needing to know or type that client's clientCode + the "chiefadmin"
+// support login's password - mints a fresh CLIENT_USER session for that same
+// auto-provisioned support account (see createClient/backfillSystemUsers)
+// directly. Provisions the account on the fly if it's somehow still missing,
+// rather than blocking on a backfill having run.
+async function impersonateClient(req, res) {
+  const client = await Client.findByPk(req.params.id);
+  if (!client) return res.status(404).json({ message: 'Client not found' });
+
+  let systemUser = await ClientUser.findOne({ where: { clientId: client.id, isSystemUser: true } });
+  if (!systemUser) {
+    const adminRole = await Role.findOne({ where: { name: 'ADMIN' } });
+    if (!adminRole) return res.status(500).json({ message: 'ADMIN role not configured' });
+    systemUser = await ClientUser.create({
+      clientId: client.id, username: 'chiefadmin',
+      passwordHash: await bcrypt.hash(generateReadablePassword(), 10),
+      name: 'Chief Admin Support', isSystemUser: true,
+    });
+    await systemUser.setRoles([adminRole]);
+  }
+  if (!systemUser.active) return res.status(400).json({ message: 'This client\'s support login has been deactivated' });
+
+  const roles = (await systemUser.getRoles()).map((r) => r.name);
+  // A fresh session id evicts any session already active for this support
+  // login elsewhere, same single-session rule every other login follows.
+  const sessionId = crypto.randomUUID();
+  await systemUser.update({ currentSessionId: sessionId });
+  const token = signToken({
+    type: 'CLIENT_USER', id: systemUser.id, clientId: client.id, clientCode: client.clientCode, roles, sessionId,
+  });
+
+  // Required lazily (not at module top) to avoid a require() cycle:
+  // subscription.controller.js itself requires client.controller.js.
+  const { syncClientPaymentStatus } = require('./subscription.controller');
+  const paymentStatus = await syncClientPaymentStatus(client.id);
+  console.log(`Chief Admin "${req.user.username}" opened client ${client.clientCode} (${client.clientName}) via impersonation.`);
+
+  return res.json({
+    token,
+    user: { id: systemUser.id, username: systemUser.username, name: systemUser.name, roles, type: 'CLIENT_USER' },
+    client: {
+      id: client.id, clientCode: client.clientCode, clientName: client.clientName,
+      paymentStatus, allowBillCancellationRefund: client.allowBillCancellationRefund,
+    },
+  });
+}
+
+// GET /api/clients/:clientId/revenue
+// Lab-billing revenue this client has collected from their own patients -
+// distinct from the SaaS subscription payments tracked in ClientPayment.
+async function getClientRevenue(req, res) {
+  const client = await Client.findByPk(req.params.clientId);
+  if (!client) return res.status(404).json({ message: 'Client not found' });
+
+  const { from, to } = currentMonthRange();
+  const where = { clientId: client.id };
+
+  const [totals, thisMonth] = await Promise.all([
+    Bill.findOne({
+      where,
+      attributes: [
+        [fn('COUNT', col('id')), 'billCount'],
+        [fn('COALESCE', fn('SUM', col('paidAmount')), 0), 'revenueCollected'],
+        [fn('COALESCE', fn('SUM', col('discount')), 0), 'discountGiven'],
+        [fn('COALESCE', fn('SUM', col('dueAmount')), 0), 'dueOutstanding'],
+      ],
+      raw: true,
+    }),
+    Bill.findOne({
+      where: { ...where, createdAt: { [Op.between]: [from, to] } },
+      attributes: [
+        [fn('COUNT', col('id')), 'billCount'],
+        [fn('COALESCE', fn('SUM', col('paidAmount')), 0), 'revenueCollected'],
+      ],
+      raw: true,
+    }),
+  ]);
+
+  return res.json({
+    totalBillCount: Number(totals.billCount),
+    totalRevenueCollected: Number(totals.revenueCollected),
+    totalDiscountGiven: Number(totals.discountGiven),
+    totalDueOutstanding: Number(totals.dueOutstanding),
+    thisMonthBillCount: Number(thisMonth.billCount),
+    thisMonthRevenueCollected: Number(thisMonth.revenueCollected),
+  });
 }
 
 // PUT /api/clients/:id
@@ -342,6 +448,6 @@ async function backfillSystemUsers() {
 }
 
 module.exports = {
-  createClient, listClients, getClient, updateClient, listMarketingPersons, createInitialSubscription, currentMonthRange,
-  generateClientCode, previewNextClientCode, backfillSystemUsers,
+  createClient, listClients, getClient, updateClient, getClientRevenue, listMarketingPersons, createInitialSubscription, currentMonthRange,
+  generateClientCode, previewNextClientCode, backfillSystemUsers, impersonateClient,
 };
