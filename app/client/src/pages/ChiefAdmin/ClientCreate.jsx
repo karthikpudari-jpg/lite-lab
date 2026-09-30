@@ -101,14 +101,15 @@ export default function ClientCreate() {
         </table>
         {result.systemUser && (
           <div style={{ marginTop: 16, background: '#fef9c3', border: '1px solid #fde68a', borderRadius: 8, padding: 12 }}>
-            <strong>Chief Admin support login (write this down — shown only once):</strong>
+            <strong>Chief Admin support login:</strong>
             <p style={{ margin: '6px 0 0' }}>
               Client Code <strong>{result.client.clientCode}</strong> · Username <strong>{result.systemUser.username}</strong> ·
               Password <strong>{result.systemUser.password}</strong>
             </p>
             <p style={{ margin: '6px 0 0', fontSize: 12, color: '#854d0e' }}>
-              Use this to log in as this client whenever they need help - it isn't counted as one of their billable
-              users. Reset it anytime from this client's Users list if needed.
+              This is the standard Chief Admin support password, the same on every client - nothing to write down.
+              It isn't counted as one of this client's billable users. You can also skip typing it entirely via
+              "Log In as This Client" on this client's detail page.
             </p>
           </div>
         )}

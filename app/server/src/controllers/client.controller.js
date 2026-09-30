@@ -33,8 +33,19 @@ async function generateClientCode(source) {
   return code;
 }
 
-// A readable random password for the auto-created chiefadmin support login -
-// short hex (like crypto.randomBytes(24).toString('hex')) is secure but
+// When set, every client's Chief Admin support login shares this ONE
+// password, so Chief Admin doesn't have to look up or remember a different
+// one per client to use the Client Login tab as "chiefadmin" ("Log In as
+// This Client" on Client Detail skips needing it at all, but this still
+// matters for anyone using the plain login form). Never hardcoded here -
+// only ever read from the environment (see .env.example), so no real
+// password value ends up committed to source control. Left unset, each
+// client's support login instead gets its own random password, same as
+// before this feature existed.
+const SUPPORT_LOGIN_PASSWORD = process.env.SUPPORT_LOGIN_PASSWORD || null;
+
+// A readable random password, used for a client's support login only when
+// SUPPORT_LOGIN_PASSWORD isn't configured - short hex is secure but
 // impossible to read/type back; this trades a little entropy for something
 // a person can actually copy and use right after client creation.
 function generateReadablePassword() {
@@ -155,17 +166,16 @@ async function createClient(req, res) {
       }
 
       // One Chief-Admin support login per client, auto-created here - lets
-      // Chief Admin log in (client code + "chiefadmin" + the password
-      // returned below, once, same as the client's own staff passwords
-      // Chief Admin already knows because they typed them) to help
-      // troubleshoot, without ever touching the client's own credentials.
-      // Never counted as one of the client's own billable users. The
-      // password can always be changed later too (Client Detail > Reset
-      // Password), this is just what it's created with.
+      // Chief Admin log in (client code + "chiefadmin" + the standard
+      // support password below - the same on every client if
+      // SUPPORT_LOGIN_PASSWORD is configured, otherwise a fresh random one
+      // just for this client) to help troubleshoot, without ever touching
+      // the client's own credentials. Never counted as one of the client's
+      // own billable users.
       const adminRole = await Role.findOne({ where: { name: 'ADMIN' }, transaction: t });
       let systemUserCredentials = null;
       if (adminRole) {
-        const systemPassword = generateReadablePassword();
+        const systemPassword = SUPPORT_LOGIN_PASSWORD || generateReadablePassword();
         const systemUser = await ClientUser.create({
           clientId: client.id, username: 'chiefadmin',
           passwordHash: await bcrypt.hash(systemPassword, 10),
@@ -281,7 +291,7 @@ async function impersonateClient(req, res) {
     if (!adminRole) return res.status(500).json({ message: 'ADMIN role not configured' });
     systemUser = await ClientUser.create({
       clientId: client.id, username: 'chiefadmin',
-      passwordHash: await bcrypt.hash(generateReadablePassword(), 10),
+      passwordHash: await bcrypt.hash(SUPPORT_LOGIN_PASSWORD || generateReadablePassword(), 10),
       name: 'Chief Admin Support', isSystemUser: true,
     });
     await systemUser.setRoles([adminRole]);
@@ -417,8 +427,13 @@ async function previewNextClientCode(req, res) {
 
 // Called once at server startup (see index.js) - createClient only auto-adds
 // the "chiefadmin" support login for clients created from now on, so every
-// client that already existed before this feature needs it added too.
-// Idempotent: skips any client that already has one.
+// client that already existed before this feature needs it added too. When
+// SUPPORT_LOGIN_PASSWORD is configured, this also re-hashes every EXISTING
+// support login's password to match it on every restart, so a client
+// provisioned before that env var was set (or before it changed) still ends
+// up in sync - not just newly-created clients. Left unset, existing support
+// logins are never touched here, only missing ones get created (each with
+// its own random password, same as before this env var existed).
 async function backfillSystemUsers() {
   const adminRole = await Role.findOne({ where: { name: 'ADMIN' } });
   if (!adminRole) return;
@@ -426,25 +441,30 @@ async function backfillSystemUsers() {
   const clients = await Client.findAll({
     include: [{ model: ClientUser, where: { isSystemUser: true }, required: false }],
   });
-  const missing = clients.filter((c) => (c.ClientUsers || []).length === 0);
-  if (missing.length === 0) return;
 
-  for (const client of missing) {
+  let created = 0;
+  let resynced = 0;
+  for (const client of clients) {
+    const existing = (client.ClientUsers || [])[0];
+    if (existing) {
+      if (SUPPORT_LOGIN_PASSWORD) {
+        await existing.update({ passwordHash: await bcrypt.hash(SUPPORT_LOGIN_PASSWORD, 10) });
+        resynced += 1;
+      }
+      continue;
+    }
     const existingUsername = await ClientUser.findOne({ where: { clientId: client.id, username: 'chiefadmin' } });
     if (existingUsername) continue; // a real staff user already happens to be named "chiefadmin" - don't collide
-    const systemPassword = generateReadablePassword();
     const systemUser = await ClientUser.create({
       clientId: client.id, username: 'chiefadmin',
-      passwordHash: await bcrypt.hash(systemPassword, 10),
+      passwordHash: await bcrypt.hash(SUPPORT_LOGIN_PASSWORD || generateReadablePassword(), 10),
       name: 'Chief Admin Support', isSystemUser: true,
     });
     await systemUser.setRoles([adminRole]);
-    // Only place this password is ever visible - logged once here so it can
-    // be read off the server logs, same idea as returning it from
-    // createClient for a client made from now on (see there for why).
-    console.log(`Chief Admin support login for ${client.clientCode}: chiefadmin / ${systemPassword}`);
+    created += 1;
   }
-  console.log(`Backfilled a Chief Admin support login for ${missing.length} existing client(s).`);
+  if (created > 0) console.log(`Created a Chief Admin support login for ${created} client(s).`);
+  if (resynced > 0) console.log(`Chief Admin support login password synced to SUPPORT_LOGIN_PASSWORD for ${resynced} client(s).`);
 }
 
 module.exports = {
