@@ -47,15 +47,13 @@ export default function ReviewResults({ group, focusSampleId, onClose, onSaved }
       const complete = paramsFor(s).every((p) => (initialValuesFor(s)[p.id] || '').toString().trim() !== '');
       if (complete) set.add(s.id);
     }
+    // Whichever test "Results"/"Verify" was clicked on should already be
+    // showing when the screen opens, not require an extra click to check it.
+    if (focusSampleId && eligibleSamples.some((s) => s.id === focusSampleId)) set.add(focusSampleId);
     return set;
   });
-  const [activeSampleId, setActiveSampleId] = useState(
-    focusSampleId && eligibleSamples.some((s) => s.id === focusSampleId) ? focusSampleId : eligibleSamples[0]?.id,
-  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-
-  const activeSample = eligibleSamples.find((s) => s.id === activeSampleId);
 
   function enteredCount(sample) {
     const params = paramsFor(sample);
@@ -108,11 +106,11 @@ export default function ReviewResults({ group, focusSampleId, onClose, onSaved }
     }
   }
 
-  if (!activeSample) return null;
-  const activeCount = enteredCount(activeSample);
-  const activeHasChanges = paramsFor(activeSample).some(
-    (p) => (values[activeSample.id]?.[p.id] || '') !== (savedValues[activeSample.id]?.[p.id] || ''),
-  );
+  function hasChanges(sample) {
+    return paramsFor(sample).some(
+      (p) => (values[sample.id]?.[p.id] || '') !== (savedValues[sample.id]?.[p.id] || ''),
+    );
+  }
 
   return (
     <div className="review-screen">
@@ -142,16 +140,16 @@ export default function ReviewResults({ group, focusSampleId, onClose, onSaved }
           {eligibleSamples.map((s) => {
             const c = enteredCount(s);
             const complete = c.filled === c.total;
-            const isActive = s.id === activeSampleId;
+            const isChecked = checked.has(s.id);
             return (
               <div
                 key={s.id}
-                className={`review-test-row${isActive ? ' active' : ''}`}
-                onClick={() => setActiveSampleId(s.id)}
+                className={`review-test-row${isChecked ? ' active' : ''}`}
+                onClick={() => toggleChecked(s.id)}
               >
                 <input
                   type="checkbox"
-                  checked={checked.has(s.id)}
+                  checked={isChecked}
                   onChange={() => toggleChecked(s.id)}
                   onClick={(e) => e.stopPropagation()}
                   style={{ marginTop: 2 }}
@@ -166,48 +164,59 @@ export default function ReviewResults({ group, focusSampleId, onClose, onSaved }
         </div>
 
         <div className="review-main">
-          <div className="review-main-header">
-            <h2>{activeSample.BillItem?.TestMaster?.testName}</h2>
-            {activeHasChanges && <span className="review-badge delta">Δ Delta</span>}
-            <span className={`review-badge entered${activeCount.filled === activeCount.total ? '' : ' partial'}`}>
-              {activeCount.filled} / {activeCount.total} Entered
-            </span>
-          </div>
-
           {error && <p className="error-text">{error}</p>}
 
-          <div className="review-param-grid">
-            {paramsFor(activeSample).map((p) => {
-              const value = values[activeSample.id]?.[p.id] || '';
-              const abnormal = isOutOfRange(value, p.normalRangeLow, p.normalRangeHigh);
-              return (
-                <div className="review-param-card" key={p.id}>
-                  <div>
-                    <div className="p-name">{p.parameterCode ? `[${p.parameterCode}] ` : ''}{p.parameterName}</div>
-                    <div className="p-range">Normal: {p.normalRangeLow}–{p.normalRangeHigh}</div>
-                  </div>
-                  <div className="p-input-wrap">
-                    <input
-                      className={abnormal ? 'abnormal' : ''}
-                      value={value}
-                      onChange={(e) => setValue(activeSample.id, p.id, e.target.value)}
-                    />
-                    <span className="p-unit">{p.unit}</span>
-                  </div>
+          {checkedSamples.length === 0 && (
+            <p className="masters-empty">Check a test on the left to enter or review its results.</p>
+          )}
+
+          {checkedSamples.map((sample) => {
+            const count = enteredCount(sample);
+            return (
+              <div key={sample.id} className="review-section">
+                <div className="review-main-header">
+                  <h2>{sample.BillItem?.TestMaster?.testName}</h2>
+                  {hasChanges(sample) && <span className="review-badge delta">Δ Delta</span>}
+                  <span className={`review-badge entered${count.filled === count.total ? '' : ' partial'}`}>
+                    {count.filled} / {count.total} Entered
+                  </span>
                 </div>
-              );
-            })}
-          </div>
+
+                <div className="review-param-grid">
+                  {paramsFor(sample).map((p) => {
+                    const value = values[sample.id]?.[p.id] || '';
+                    const abnormal = isOutOfRange(value, p.normalRangeLow, p.normalRangeHigh);
+                    return (
+                      <div className="review-param-card" key={p.id}>
+                        <div>
+                          <div className="p-name">{p.parameterCode ? `[${p.parameterCode}] ` : ''}{p.parameterName}</div>
+                          <div className="p-range">Normal: {p.normalRangeLow}–{p.normalRangeHigh}</div>
+                        </div>
+                        <div className="p-input-wrap">
+                          <input
+                            className={abnormal ? 'abnormal' : ''}
+                            value={value}
+                            onChange={(e) => setValue(sample.id, p.id, e.target.value)}
+                          />
+                          <span className="p-unit">{p.unit}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
       <div className="review-footer">
+        <span className="checked-count">{checkedSamples.length} of {eligibleSamples.length} test(s) checked</span>
         <button onClick={handleSubmit} disabled={busy || checkedSamples.length === 0}>
           {busy ? 'Saving…' : allCheckedReady
             ? `Mark Reviewed ${checkedSamples.length} Test${checkedSamples.length === 1 ? '' : 's'}`
             : `Save Results (${checkedSamples.length})`}
         </button>
-        <span className="checked-count">{checkedSamples.length} of {eligibleSamples.length} test(s) checked</span>
       </div>
     </div>
   );

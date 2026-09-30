@@ -561,6 +561,12 @@ input, select, textarea {
 .review-test-row.active .count-pill:not(.complete) { background: #e0e7ff; color: #4338ca; }
 
 .review-main { flex: 1; overflow-y: auto; padding: 22px 28px; min-width: 0; }
+/* One .review-section per checked test - stacked when more than one is
+   checked, so checking a second/third test adds its parameters below
+   rather than replacing what's already showing. */
+.review-section { margin-bottom: 28px; }
+.review-section:last-child { margin-bottom: 0; }
+.review-section + .review-section { border-top: 1px solid #e2e8f0; padding-top: 24px; }
 .review-main-header { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
 .review-main-header h2 { margin: 0; font-size: 15px; letter-spacing: 0.03em; font-weight: 800; }
 .review-badge {
