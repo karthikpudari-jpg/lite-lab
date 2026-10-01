@@ -150,6 +150,12 @@ export default function LabReport() {
                   <p style={{ whiteSpace: 'pre-wrap', margin: '4px 0 0' }}>{p.value}</p>
                 </div>
               ))}
+              {t.interpretation && (
+                <div style={{ marginTop: 10 }}>
+                  <strong>Interpretation</strong>
+                  <p style={{ whiteSpace: 'pre-wrap', margin: '4px 0 0', color: '#475569' }}>{t.interpretation}</p>
+                </div>
+              )}
             </div>
           );
         })}

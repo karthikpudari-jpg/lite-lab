@@ -259,6 +259,7 @@ async function getBillReport(req, res) {
     tests: releasedSamples.map((s) => ({
       testName: s.BillItem.TestMaster.testName,
       testCode: s.BillItem.TestMaster.testCode,
+      interpretation: s.BillItem.TestMaster.interpretation,
       barcode: s.barcode,
       collectedAt: s.collectedAt,
       releasedAt: s.Report.releasedAt,

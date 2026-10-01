@@ -7,7 +7,7 @@ const GENDER_OPTIONS = ['Any', 'Male', 'Female', 'Other'];
 const AGE_UNIT_OPTIONS = ['Years', 'Months', 'Days'];
 const AGE_UNIT_ABBR = { Years: 'y', Months: 'm', Days: 'd' };
 const emptyRangeRow = () => ({ gender: 'Any', ageMin: '', ageMax: '', ageUnit: 'Years', normalRangeLow: '', normalRangeHigh: '' });
-const blankTestForm = () => ({ testCode: '', testName: '', category: '', sampleType: '' });
+const blankTestForm = () => ({ testCode: '', testName: '', category: '', sampleType: '', interpretation: '' });
 const blankParamForm = () => ({ parameterName: '', unit: '', method: '', isInterpretation: false });
 // Narrower than the app-wide .form-grid default (minmax 200px) so Gender/Age/Unit/Range fields
 // wrap two-three to a row instead of stacking one-per-row on a narrow/mobile screen.
@@ -142,7 +142,7 @@ export default function Masters() {
     setEditingTestId(test.id);
     setTestForm({
       testCode: test.testCode, testName: test.testName,
-      category: test.category || '', sampleType: test.sampleType || '',
+      category: test.category || '', sampleType: test.sampleType || '', interpretation: test.interpretation || '',
     });
     setShowTestModal(true);
   }
@@ -392,6 +392,14 @@ export default function Masters() {
               </label>
               <label><span>Sample Type</span>
                 <input value={testForm.sampleType} onChange={(e) => setTestForm((f) => ({ ...f, sampleType: e.target.value }))} placeholder="e.g. Blood" />
+              </label>
+              <label><span>Interpretation (optional — same note on every report for this test)</span>
+                <textarea
+                  rows={4}
+                  value={testForm.interpretation}
+                  onChange={(e) => setTestForm((f) => ({ ...f, interpretation: e.target.value }))}
+                  placeholder="e.g. Elevated in bacterial infection, reduced in viral infection"
+                />
               </label>
               <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                 <button type="submit" disabled={savingTest}>

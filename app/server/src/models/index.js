@@ -238,6 +238,11 @@ const TestMaster = sequelize.define('TestMaster', {
   // "Uncategorized". Sample type (e.g. "Blood", "Urine") is informational.
   category: { type: DataTypes.STRING },
   sampleType: { type: DataTypes.STRING },
+  // A fixed note about this test, the same on every report regardless of
+  // patient or entered values (e.g. "Elevated in bacterial infection,
+  // reduced in viral") - set once here at Test Master, not per-result.
+  // Printed on the report below this test's results whenever non-empty.
+  interpretation: { type: DataTypes.TEXT },
   active: { type: DataTypes.BOOLEAN, defaultValue: true },
   ...AUDIT_FIELDS,
 }, { tableName: 'test_master' });

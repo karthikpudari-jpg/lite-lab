@@ -58,7 +58,7 @@ async function createTestGroup(req, res) {
 
 // POST /api/masters/tests
 async function createTest(req, res) {
-  const { testCode, testName, category, sampleType, parameters } = req.body;
+  const { testCode, testName, category, sampleType, interpretation, parameters } = req.body;
   if (!testCode || !testName) {
     return res.status(400).json({ message: 'testCode and testName are required' });
   }
@@ -66,7 +66,7 @@ async function createTest(req, res) {
   const existing = await TestMaster.findOne({ where: { testCode } });
   if (existing) return res.status(409).json({ message: 'Test Code already exists' });
 
-  const test = await TestMaster.create({ testCode, testName, category, sampleType });
+  const test = await TestMaster.create({ testCode, testName, category, sampleType, interpretation });
 
   if (Array.isArray(parameters)) {
     const clientId = requesterClientId(req);
@@ -107,11 +107,12 @@ async function listTests(req, res) {
 async function updateTest(req, res) {
   const test = await TestMaster.findByPk(req.params.id);
   if (!test) return res.status(404).json({ message: 'Test not found' });
-  const { testName, category, sampleType, active } = req.body;
+  const { testName, category, sampleType, interpretation, active } = req.body;
   await test.update({
     testName: testName ?? test.testName,
     category: category !== undefined ? category : test.category,
     sampleType: sampleType !== undefined ? sampleType : test.sampleType,
+    interpretation: interpretation !== undefined ? interpretation : test.interpretation,
     active: active ?? test.active,
   });
   return res.json(test);
