@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { Icon } from '../../components/Icons';
 
 const REFUND_MODES = ['Cash', 'Card', 'UPI', 'Insurance'];
 
@@ -154,6 +155,7 @@ export default function Orders() {
 
   async function submitDiscount(e) {
     e.preventDefault();
+    if (discountSaving) return; // guard against a rapid double-submit
     setDiscountError('');
     setDiscountSaving(true);
     try {
@@ -235,13 +237,25 @@ export default function Orders() {
                     ))}
                   </div>
                 </td>
-                <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <button onClick={() => navigate(`/app/orders/${b.id}/edit`)}>Edit</button>
-                  <button onClick={() => navigate(`/app/billing/print/${b.id}`)}>Print Bill</button>
-                  <button disabled={!anyReleased} onClick={() => navigate(`/app/report/${b.id}`)}>Print Report</button>
-                  {settings?.allowBillCancellationRefund && <button onClick={() => openRefundModal(b)}>Cancel / Refund</button>}
+                <td style={{ display: 'flex', gap: 4, flexWrap: 'nowrap' }}>
+                  <button className="icon-btn" title="Edit" aria-label="Edit" onClick={() => navigate(`/app/orders/${b.id}/edit`)}>
+                    <Icon name="edit" size={15} />
+                  </button>
+                  <button className="icon-btn" title="Print Bill" aria-label="Print Bill" onClick={() => navigate(`/app/billing/print/${b.id}`)}>
+                    <Icon name="print" size={15} />
+                  </button>
+                  <button className="icon-btn" title="Print Report" aria-label="Print Report" disabled={!anyReleased} onClick={() => navigate(`/app/report/${b.id}`)}>
+                    <Icon name="reports" size={15} />
+                  </button>
+                  {settings?.allowBillCancellationRefund && (
+                    <button className="icon-btn" title="Cancel / Refund" aria-label="Cancel / Refund" onClick={() => openRefundModal(b)}>
+                      <Icon name="refund" size={15} />
+                    </button>
+                  )}
                   {settings?.allowPostBillingDiscount && Number(b.paidAmount) > 0 && (
-                    <button onClick={() => openDiscountModal(b)}>Discount</button>
+                    <button className="icon-btn" title="Discount" aria-label="Discount" onClick={() => openDiscountModal(b)}>
+                      <Icon name="percent" size={15} />
+                    </button>
                   )}
                 </td>
               </tr>

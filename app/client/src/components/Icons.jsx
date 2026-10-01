@@ -22,6 +22,8 @@ const PATHS = {
   print: 'M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-2M6 14h12v7H6z',
   sparkle: 'M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8z',
   edit: 'M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z',
+  refund: 'M3 12a9 9 0 1 0 3-6.7M3 4v5h5',
+  percent: 'M19 5L5 19M7.5 7a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM16.5 22a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
 };
 
 export function Icon({ name, size = 20, ...rest }) {
