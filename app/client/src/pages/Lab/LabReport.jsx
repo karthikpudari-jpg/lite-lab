@@ -129,12 +129,11 @@ export default function LabReport() {
               {numericParams.length > 0 && (
                 <table>
                   <thead>
-                    <tr><th>Code</th><th>Parameter</th><th>Result</th><th>Unit</th><th>Bio. Ref. Interval</th></tr>
+                    <tr><th>Parameter</th><th>Result</th><th>Unit</th><th>Bio. Ref. Interval</th></tr>
                   </thead>
                   <tbody>
                     {numericParams.map((p) => (
                       <tr key={p.parameterName}>
-                        <td>{p.parameterCode || '—'}</td>
                         <td>{p.parameterName}</td>
                         <td style={p.isAbnormal ? { color: '#b91c1c', fontWeight: 700 } : undefined}>{p.value}</td>
                         <td>{p.unit || '—'}</td>
@@ -146,7 +145,7 @@ export default function LabReport() {
               )}
               {interpretationParams.map((p) => (
                 <div key={p.parameterName} style={{ marginTop: 10 }}>
-                  <strong>{p.parameterCode ? `[${p.parameterCode}] ` : ''}{p.parameterName}</strong>
+                  <strong>{p.parameterName}</strong>
                   <p style={{ whiteSpace: 'pre-wrap', margin: '4px 0 0' }}>{p.value}</p>
                 </div>
               ))}
