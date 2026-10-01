@@ -50,6 +50,7 @@ export default function Masters() {
   const [groupError, setGroupError] = useState('');
 
   const [showTestModal, setShowTestModal] = useState(false);
+  const [editingTestId, setEditingTestId] = useState(null); // null = creating a new test, else the test being edited
   const [testForm, setTestForm] = useState(blankTestForm());
   const [savingTest, setSavingTest] = useState(false);
 
@@ -128,7 +129,18 @@ export default function Masters() {
 
   function openNewTest() {
     setError('');
+    setEditingTestId(null);
     setTestForm(blankTestForm());
+    setShowTestModal(true);
+  }
+
+  function openEditTest(test) {
+    setError('');
+    setEditingTestId(test.id);
+    setTestForm({
+      testCode: test.testCode, testName: test.testName,
+      category: test.category || '', sampleType: test.sampleType || '',
+    });
     setShowTestModal(true);
   }
 
@@ -138,12 +150,21 @@ export default function Masters() {
     setError('');
     setSavingTest(true);
     try {
-      const { data } = await api.post('/admin/masters/tests', testForm);
-      setShowTestModal(false);
-      await load();
-      setSelectedTestId(data.id);
+      if (editingTestId) {
+        // testCode isn't editable here - changing it could break anything
+        // elsewhere that already references this test by code.
+        const { testCode, ...editable } = testForm;
+        await api.put(`/admin/masters/tests/${editingTestId}`, editable);
+        setShowTestModal(false);
+        await load();
+      } else {
+        const { data } = await api.post('/admin/masters/tests', testForm);
+        setShowTestModal(false);
+        await load();
+        setSelectedTestId(data.id);
+      }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create test');
+      setError(err.response?.data?.message || `Failed to ${editingTestId ? 'save' : 'create'} test`);
     } finally {
       setSavingTest(false);
     }
@@ -302,7 +323,12 @@ export default function Masters() {
                     {(selectedTest.ParameterMasters || []).length} parameter(s) configured
                   </p>
                 </div>
-                <button type="button" onClick={openAddParameter}>+ Add Parameter</button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button type="button" className="secondary icon-btn" title="Edit test details" onClick={() => openEditTest(selectedTest)}>
+                    <Icon name="edit" size={15} />
+                  </button>
+                  <button type="button" onClick={openAddParameter}>+ Add Parameter</button>
+                </div>
               </div>
               <table>
                 <thead><tr><th>Code</th><th>Parameter</th><th>Unit</th><th>Range Matrix</th><th></th></tr></thead>
@@ -334,10 +360,15 @@ export default function Masters() {
       {showTestModal && (
         <div className="modal-overlay" onClick={() => setShowTestModal(false)}>
           <div className="modal-card" style={{ textAlign: 'left', width: 420 }} onClick={(e) => e.stopPropagation()}>
-            <h2>New Test</h2>
+            <h2>{editingTestId ? 'Edit Test' : 'New Test'}</h2>
             <form onSubmit={handleSaveTest}>
-              <label><span>Test Code</span>
-                <input value={testForm.testCode} onChange={(e) => setTestForm((f) => ({ ...f, testCode: e.target.value }))} required />
+              <label><span>Test Code{editingTestId ? ' (can\'t be changed)' : ''}</span>
+                <input
+                  value={testForm.testCode}
+                  onChange={(e) => setTestForm((f) => ({ ...f, testCode: e.target.value }))}
+                  disabled={!!editingTestId}
+                  required
+                />
               </label>
               <label><span>Test Name</span>
                 <input value={testForm.testName} onChange={(e) => setTestForm((f) => ({ ...f, testName: e.target.value }))} required />
@@ -359,7 +390,9 @@ export default function Masters() {
                 <input value={testForm.sampleType} onChange={(e) => setTestForm((f) => ({ ...f, sampleType: e.target.value }))} placeholder="e.g. Blood" />
               </label>
               <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                <button type="submit" disabled={savingTest}>{savingTest ? 'Creating…' : 'Create Test'}</button>
+                <button type="submit" disabled={savingTest}>
+                  {savingTest ? (editingTestId ? 'Saving…' : 'Creating…') : (editingTestId ? 'Save Changes' : 'Create Test')}
+                </button>
                 <button type="button" className="secondary" onClick={() => setShowTestModal(false)}>Cancel</button>
               </div>
             </form>
