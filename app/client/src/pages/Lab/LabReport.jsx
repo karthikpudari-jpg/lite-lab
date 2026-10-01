@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../../api/client';
+import ShareButton from '../../components/ShareButton';
 
 function formatDateTime(d) {
   if (!d) return '—';
@@ -78,7 +79,10 @@ export default function LabReport() {
             Include AI Trend Report
           </label>
         )}
-        <button onClick={() => window.print()} style={{ marginLeft: 'auto' }}>Print Report</button>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <ShareButton apiPath={`/report-view/bills/${billId}/report/share`} />
+          <button onClick={() => window.print()}>Print Report</button>
+        </div>
       </div>
 
       <div className="report-sheet">
@@ -116,27 +120,39 @@ export default function LabReport() {
           <div><span>Report Date</span><strong>{formatDateTime(releasedAt)}</strong></div>
         </div>
 
-        {tests.map((t) => (
-          <div key={t.barcode} style={{ marginTop: 24 }}>
-            <h4 style={{ background: '#f1f5f9', padding: '6px 10px', borderRadius: 6 }}>{t.testName}</h4>
-            <table>
-              <thead>
-                <tr><th>Code</th><th>Parameter</th><th>Result</th><th>Unit</th><th>Bio. Ref. Interval</th></tr>
-              </thead>
-              <tbody>
-                {t.parameters.map((p) => (
-                  <tr key={p.parameterName}>
-                    <td>{p.parameterCode || '—'}</td>
-                    <td>{p.parameterName}</td>
-                    <td style={p.isAbnormal ? { color: '#b91c1c', fontWeight: 700 } : undefined}>{p.value}</td>
-                    <td>{p.unit || '—'}</td>
-                    <td>{p.normalRangeLow} - {p.normalRangeHigh}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ))}
+        {tests.map((t) => {
+          const numericParams = t.parameters.filter((p) => !p.isInterpretation);
+          const interpretationParams = t.parameters.filter((p) => p.isInterpretation && p.value);
+          return (
+            <div key={t.barcode} style={{ marginTop: 24 }}>
+              <h4 style={{ background: '#f1f5f9', padding: '6px 10px', borderRadius: 6 }}>{t.testName}</h4>
+              {numericParams.length > 0 && (
+                <table>
+                  <thead>
+                    <tr><th>Code</th><th>Parameter</th><th>Result</th><th>Unit</th><th>Bio. Ref. Interval</th></tr>
+                  </thead>
+                  <tbody>
+                    {numericParams.map((p) => (
+                      <tr key={p.parameterName}>
+                        <td>{p.parameterCode || '—'}</td>
+                        <td>{p.parameterName}</td>
+                        <td style={p.isAbnormal ? { color: '#b91c1c', fontWeight: 700 } : undefined}>{p.value}</td>
+                        <td>{p.unit || '—'}</td>
+                        <td>{p.normalRangeLow} - {p.normalRangeHigh}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {interpretationParams.map((p) => (
+                <div key={p.parameterName} style={{ marginTop: 10 }}>
+                  <strong>{p.parameterCode ? `[${p.parameterCode}] ` : ''}{p.parameterName}</strong>
+                  <p style={{ whiteSpace: 'pre-wrap', margin: '4px 0 0' }}>{p.value}</p>
+                </div>
+              ))}
+            </div>
+          );
+        })}
 
         {trend && includeTrend && (
           <div style={{ marginTop: 28 }}>

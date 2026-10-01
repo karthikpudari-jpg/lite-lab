@@ -5,6 +5,7 @@ const {
 } = require('../models');
 const { buildParameterInsight } = require('../utils/trendInsights');
 const { resolveNormalRange } = require('../utils/normalRange');
+const { sendEmail, sendWhatsApp } = require('../utils/notify');
 
 // A client doing result entry sees every universal parameter plus whatever
 // parameters it added for itself for that test - never another client's own.
@@ -190,6 +191,26 @@ async function releaseSample(req, res) {
   return res.json({ message: 'Report released' });
 }
 
+// PUT /api/lab/samples/:id/revoke  Body: { reason }
+// Undoes a release (e.g. a mistake was found after the fact) - the report is
+// never deleted, just stamped as revoked, and the sample rolls back to
+// VERIFIED so results can be corrected and it can go through release again.
+async function revokeReport(req, res) {
+  const { clientId } = req.user;
+  const { reason } = req.body;
+  if (!reason?.trim()) return res.status(400).json({ message: 'A reason is required to revoke a released report' });
+
+  const sample = await Sample.findOne({ where: { id: req.params.id, clientId }, include: [Report] });
+  if (!sample) return res.status(404).json({ message: 'Sample not found' });
+  if (sample.status !== 'RELEASED') {
+    return res.status(400).json({ message: 'Only a released report can be revoked' });
+  }
+
+  await sample.update({ status: 'VERIFIED' });
+  await sample.Report.update({ status: 'REVOKED', revokedAt: new Date(), revokedReason: reason.trim() });
+  return res.json({ message: 'Report revoked' });
+}
+
 // GET /api/lab/bills/:billId/report
 // A single consolidated report covering every RELEASED test on this bill -
 // a patient with several tests on one visit gets one combined report, and
@@ -224,11 +245,14 @@ async function getBillReport(req, res) {
       payor: bill.Payor?.name || null,
     },
     patient: bill.Patient,
+    // Branding details (set from Report Branding) shown on the report -
+    // separate from clientName/address/mobile/email Chief Admin set at
+    // client creation, falling back to those until this client sets its own.
     client: {
-      clientName: bill.Client.clientName,
-      address: bill.Client.address,
-      mobile: bill.Client.mobile,
-      email: bill.Client.email,
+      clientName: bill.Client.brandingName || bill.Client.clientName,
+      address: bill.Client.brandingAddress || bill.Client.address,
+      mobile: bill.Client.brandingMobile || bill.Client.mobile,
+      email: bill.Client.brandingEmail || bill.Client.email,
       logoUrl: bill.Client.reportLogoPath,
       letterheadUrl: bill.Client.reportLetterheadPath,
     },
@@ -248,10 +272,73 @@ async function getBillReport(req, res) {
           normalRangeLow: range.normalRangeLow,
           normalRangeHigh: range.normalRangeHigh,
           isAbnormal: r.isAbnormal,
+          isInterpretation: r.ParameterMaster.isInterpretation,
         };
       }),
     })),
   });
+}
+
+// POST /api/report-view/bills/:billId/report/share  Body: { channel: 'whatsapp' | 'email', to? }
+// `to` defaults to the patient's own mobile/email on file. Sends a text/HTML
+// summary of released results, not a copy of the printed report - sendWhatsApp/
+// sendEmail don't support attachments today (see utils/notify.js).
+async function shareReport(req, res) {
+  const { clientId } = req.user;
+  const { channel, to } = req.body;
+  if (channel !== 'whatsapp' && channel !== 'email') {
+    return res.status(400).json({ message: 'channel must be "whatsapp" or "email"' });
+  }
+
+  const bill = await Bill.findOne({ where: { id: req.params.billId, clientId }, include: [Patient, Client] });
+  if (!bill) return res.status(404).json({ message: 'Bill not found' });
+
+  const samples = await Sample.findAll({
+    where: { clientId, status: 'RELEASED' },
+    include: [
+      { model: BillItem, where: { billId: bill.id }, include: [TestMaster] },
+      Report,
+      { model: Result, include: [ParameterMaster] },
+    ],
+  });
+  if (samples.length === 0) return res.status(404).json({ message: 'No released reports for this bill yet' });
+
+  const age = bill.Patient?.age;
+  const gender = bill.Patient?.gender;
+  const ageUnit = bill.Patient?.ageUnit;
+  await attachNormalRanges(samples.flatMap((s) => s.Results.map((r) => r.ParameterMaster)));
+
+  const lines = samples.map((s) => {
+    const testLine = `${s.BillItem.TestMaster.testName}:`;
+    const paramLines = s.Results.map((r) => {
+      if (r.ParameterMaster.isInterpretation) {
+        return `  ${r.ParameterMaster.parameterName}: ${r.value}`;
+      }
+      const range = resolveNormalRange(r.ParameterMaster, age, gender, ageUnit);
+      const flag = r.isAbnormal ? ' (abnormal)' : '';
+      return `  ${r.ParameterMaster.parameterName}: ${r.value} ${r.ParameterMaster.unit || ''} (Normal: ${range.normalRangeLow}-${range.normalRangeHigh})${flag}`;
+    }).join('\n');
+    return `${testLine}\n${paramLines}`;
+  }).join('\n\n');
+
+  if (channel === 'whatsapp') {
+    const mobile = to || bill.Patient?.mobile;
+    if (!mobile) return res.status(400).json({ message: "No mobile number on file for this patient - provide 'to'" });
+    const result = await sendWhatsApp({
+      to: mobile,
+      message: `Hi ${bill.Patient?.name || ''}, here is your lab report from ${bill.Client.clientName}.\n\n${lines}\n\nThank you!`,
+    });
+    return res.json(result);
+  }
+
+  const email = to || bill.Patient?.email;
+  if (!email) return res.status(400).json({ message: "No email on file for this patient - provide 'to'" });
+  const result = await sendEmail({
+    to: email,
+    subject: `Your lab report from ${bill.Client.clientName} - Bill ${bill.billNo}`,
+    html: `<p>Hi ${bill.Patient?.name || ''},</p><p>Here is your lab report from ${bill.Client.clientName}.</p><pre>${lines}</pre><p>Thank you!</p>`,
+  });
+  return res.json(result);
 }
 
 /** Every past RELEASED value this patient has for one parameter, oldest first. */
@@ -302,6 +389,7 @@ async function getBillTrendReport(req, res) {
   for (const sample of samples) {
     for (const result of sample.Results) {
       const param = result.ParameterMaster;
+      if (param.isInterpretation) continue; // a trend/sparkline over free text is meaningless
       const history = await getPatientParameterHistory(clientId, bill.patientId, param.id);
       const range = resolveNormalRange(param, bill.Patient?.age, bill.Patient?.gender, bill.Patient?.ageUnit);
       parameters.push({
@@ -324,5 +412,5 @@ async function getBillTrendReport(req, res) {
 }
 
 module.exports = {
-  listSamples, getSample, collectSample, enterResults, verifySample, releaseSample, getBillReport, getBillTrendReport,
+  listSamples, getSample, collectSample, enterResults, verifySample, releaseSample, revokeReport, getBillReport, getBillTrendReport, shareReport,
 };

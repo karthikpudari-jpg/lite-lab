@@ -80,6 +80,7 @@ async function createTest(req, res) {
         method: p.method,
         normalRangeLow: p.normalRangeLow,
         normalRangeHigh: p.normalRangeHigh,
+        isInterpretation: !!p.isInterpretation,
       });
     }
   }
@@ -128,7 +129,7 @@ async function addParameter(req, res) {
   const test = await TestMaster.findByPk(req.params.testId);
   if (!test) return res.status(404).json({ message: 'Test not found' });
 
-  const { parameterName, unit, method, normalRangeLow, normalRangeHigh, normalRanges } = req.body;
+  const { parameterName, unit, method, normalRangeLow, normalRangeHigh, description, isInterpretation, normalRanges } = req.body;
   if (!parameterName) return res.status(400).json({ message: 'parameterName is required' });
 
   if (normalRanges !== undefined) {
@@ -155,7 +156,8 @@ async function addParameter(req, res) {
 
   const parameterCode = await generateParameterCode();
   const parameter = await ParameterMaster.create({
-    testId: test.id, clientId, parameterCode, parameterName, unit, method, normalRangeLow, normalRangeHigh,
+    testId: test.id, clientId, parameterCode, parameterName, unit, method, normalRangeLow, normalRangeHigh, description,
+    isInterpretation: !!isInterpretation,
   });
 
   for (const r of normalRanges || []) {
@@ -247,7 +249,7 @@ async function downloadTemplate(req, res) {
     if (params.length === 0) {
       rows.push({
         TEST_CODE: t.testCode, TEST_NAME: t.testName, TEST_CATEGORY: t.category || '', SAMPLE_TYPE: t.sampleType || '',
-        PARAMETER_NAME: '', UNIT: '', METHOD: '',
+        PARAMETER_NAME: '', UNIT: '', METHOD: '', IS_INTERPRETATION: '',
         NORMAL_RANGE_LOW: '', NORMAL_RANGE_HIGH: '', GENDER: '', AGE_MIN: '', AGE_MAX: '', AGE_UNIT: '', RANGE_LOW: '', RANGE_HIGH: '',
       });
       continue;
@@ -256,7 +258,8 @@ async function downloadTemplate(req, res) {
       const base = {
         TEST_CODE: t.testCode, TEST_NAME: t.testName, TEST_CATEGORY: t.category || '', SAMPLE_TYPE: t.sampleType || '',
         PARAMETER_NAME: p.parameterName,
-        UNIT: p.unit || '', METHOD: p.method || '', NORMAL_RANGE_LOW: p.normalRangeLow || '', NORMAL_RANGE_HIGH: p.normalRangeHigh || '',
+        UNIT: p.unit || '', METHOD: p.method || '', IS_INTERPRETATION: p.isInterpretation ? 'Y' : '',
+        NORMAL_RANGE_LOW: p.normalRangeLow || '', NORMAL_RANGE_HIGH: p.normalRangeHigh || '',
       };
       const ranges = p.ParameterNormalRanges || [];
       if (ranges.length === 0) {
@@ -275,18 +278,23 @@ async function downloadTemplate(req, res) {
     rows.push(
       {
         TEST_CODE: 'CBC001', TEST_NAME: 'Complete Blood Count', TEST_CATEGORY: 'Haematology', SAMPLE_TYPE: 'Blood',
-        PARAMETER_NAME: 'Hemoglobin', UNIT: 'g/dL', METHOD: 'Photometry',
+        PARAMETER_NAME: 'Hemoglobin', UNIT: 'g/dL', METHOD: 'Photometry', IS_INTERPRETATION: '',
         NORMAL_RANGE_LOW: '13', NORMAL_RANGE_HIGH: '17', GENDER: '', AGE_MIN: '', AGE_MAX: '', AGE_UNIT: '', RANGE_LOW: '', RANGE_HIGH: '',
       },
       {
         TEST_CODE: 'CBC001', TEST_NAME: 'Complete Blood Count', TEST_CATEGORY: 'Haematology', SAMPLE_TYPE: 'Blood',
-        PARAMETER_NAME: 'Hemoglobin', UNIT: 'g/dL', METHOD: 'Photometry',
+        PARAMETER_NAME: 'Hemoglobin', UNIT: 'g/dL', METHOD: 'Photometry', IS_INTERPRETATION: '',
         NORMAL_RANGE_LOW: '13', NORMAL_RANGE_HIGH: '17', GENDER: 'Male', AGE_MIN: '18', AGE_MAX: '60', AGE_UNIT: 'Years', RANGE_LOW: '13', RANGE_HIGH: '17',
       },
       {
         TEST_CODE: 'CBC001', TEST_NAME: 'Complete Blood Count', TEST_CATEGORY: 'Haematology', SAMPLE_TYPE: 'Blood',
-        PARAMETER_NAME: 'Hemoglobin', UNIT: 'g/dL', METHOD: 'Photometry',
+        PARAMETER_NAME: 'Hemoglobin', UNIT: 'g/dL', METHOD: 'Photometry', IS_INTERPRETATION: '',
         NORMAL_RANGE_LOW: '13', NORMAL_RANGE_HIGH: '17', GENDER: 'Female', AGE_MIN: '18', AGE_MAX: '60', AGE_UNIT: 'Years', RANGE_LOW: '12', RANGE_HIGH: '15',
+      },
+      {
+        TEST_CODE: 'WIDAL001', TEST_NAME: 'Widal Test', TEST_CATEGORY: 'Serology', SAMPLE_TYPE: 'Blood',
+        PARAMETER_NAME: 'Interpretation', UNIT: '', METHOD: 'Slide Agglutination', IS_INTERPRETATION: 'Y',
+        NORMAL_RANGE_LOW: '', NORMAL_RANGE_HIGH: '', GENDER: '', AGE_MIN: '', AGE_MAX: '', AGE_UNIT: '', RANGE_LOW: '', RANGE_HIGH: '',
       },
     );
   }
@@ -304,8 +312,11 @@ async function downloadTemplate(req, res) {
 /**
  * Parses an uploaded Excel/CSV and validates each row, without writing
  * anything yet. Columns: TEST_CODE, TEST_NAME, TEST_CATEGORY, SAMPLE_TYPE,
- * PARAMETER_NAME, UNIT, METHOD, NORMAL_RANGE_LOW, NORMAL_RANGE_HIGH, GENDER,
- * AGE_MIN, AGE_MAX, AGE_UNIT, RANGE_LOW, RANGE_HIGH. TEST_CATEGORY/SAMPLE_TYPE
+ * PARAMETER_NAME, UNIT, METHOD, IS_INTERPRETATION, NORMAL_RANGE_LOW,
+ * NORMAL_RANGE_HIGH, GENDER, AGE_MIN, AGE_MAX, AGE_UNIT, RANGE_LOW,
+ * RANGE_HIGH. IS_INTERPRETATION ("Y" or blank) marks a qualitative
+ * free-text parameter (e.g. a Widal conclusion) - its NORMAL_RANGE/RANGE_*
+ * columns are ignored even if filled in. TEST_CATEGORY/SAMPLE_TYPE
  * only take effect the first time a TEST_CODE is created - they're test-level,
  * not per-row, so they're ignored on a row for a test that already exists.
  * A row with no PARAMETER_NAME just ensures the test
@@ -334,6 +345,7 @@ async function previewUpload(req, res) {
     const parameterName = String(r.PARAMETER_NAME || '').trim();
     const unit = String(r.UNIT || '').trim();
     const method = String(r.METHOD || '').trim();
+    const isInterpretation = String(r.IS_INTERPRETATION || '').trim().toUpperCase() === 'Y';
     const normalRangeLow = String(r.NORMAL_RANGE_LOW || '').trim();
     const normalRangeHigh = String(r.NORMAL_RANGE_HIGH || '').trim();
     const gender = String(r.GENDER || '').trim();
@@ -367,7 +379,7 @@ async function previewUpload(req, res) {
 
     return {
       row: idx + 2, // account for header row
-      testCode, testName, testCategory, sampleType, parameterName, unit, method, normalRangeLow, normalRangeHigh,
+      testCode, testName, testCategory, sampleType, parameterName, unit, method, isInterpretation, normalRangeLow, normalRangeHigh,
       gender, ageMin, ageMax, ageUnit, rangeLow, rangeHigh,
       isNewTest,
       action,
@@ -414,10 +426,12 @@ async function commitUpload(req, res) {
       where: { testId: test.id, parameterName, clientId: null },
       defaults: {
         parameterCode: await generateParameterCode(),
-        unit: row.unit, method: row.method, normalRangeLow: row.normalRangeLow, normalRangeHigh: row.normalRangeHigh,
+        unit: row.unit, method: row.method, isInterpretation: !!row.isInterpretation,
+        normalRangeLow: row.normalRangeLow, normalRangeHigh: row.normalRangeHigh,
       },
     });
-    const hasRangeRule = !!(String(row.rangeLow || '').trim() || String(row.rangeHigh || '').trim());
+    // Range rules don't apply to a qualitative/free-text interpretation parameter.
+    const hasRangeRule = !parameter.isInterpretation && !!(String(row.rangeLow || '').trim() || String(row.rangeHigh || '').trim());
     if (paramCreated) results.parametersAdded += 1;
     else if (!hasRangeRule) results.skipped += 1;
 

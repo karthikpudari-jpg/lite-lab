@@ -182,28 +182,42 @@ export default function ReviewResults({ group, focusSampleId, onClose, onSaved }
                   </span>
                 </div>
 
-                <div className="review-param-grid">
-                  {paramsFor(sample).map((p) => {
-                    const value = values[sample.id]?.[p.id] || '';
-                    const abnormal = isOutOfRange(value, p.normalRangeLow, p.normalRangeHigh);
-                    return (
-                      <div className="review-param-card" key={p.id}>
-                        <div>
-                          <div className="p-name">{p.parameterCode ? `[${p.parameterCode}] ` : ''}{p.parameterName}</div>
-                          <div className="p-range">Normal: {p.normalRangeLow}–{p.normalRangeHigh}</div>
+                {paramsFor(sample).some((p) => !p.isInterpretation) && (
+                  <div className="review-param-grid">
+                    {paramsFor(sample).filter((p) => !p.isInterpretation).map((p) => {
+                      const value = values[sample.id]?.[p.id] || '';
+                      const abnormal = isOutOfRange(value, p.normalRangeLow, p.normalRangeHigh);
+                      return (
+                        <div className="review-param-card" key={p.id}>
+                          <div>
+                            <div className="p-name">{p.parameterCode ? `[${p.parameterCode}] ` : ''}{p.parameterName}</div>
+                            <div className="p-range">Normal: {p.normalRangeLow}–{p.normalRangeHigh}</div>
+                          </div>
+                          <div className="p-input-wrap">
+                            <input
+                              className={abnormal ? 'abnormal' : ''}
+                              value={value}
+                              onChange={(e) => setValue(sample.id, p.id, e.target.value)}
+                            />
+                            <span className="p-unit">{p.unit}</span>
+                          </div>
                         </div>
-                        <div className="p-input-wrap">
-                          <input
-                            className={abnormal ? 'abnormal' : ''}
-                            value={value}
-                            onChange={(e) => setValue(sample.id, p.id, e.target.value)}
-                          />
-                          <span className="p-unit">{p.unit}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {paramsFor(sample).filter((p) => p.isInterpretation).map((p) => (
+                  <div className="review-interpretation-card" key={p.id}>
+                    <div className="p-name">{p.parameterCode ? `[${p.parameterCode}] ` : ''}{p.parameterName}</div>
+                    <textarea
+                      rows={5}
+                      value={values[sample.id]?.[p.id] || ''}
+                      onChange={(e) => setValue(sample.id, p.id, e.target.value)}
+                      placeholder="Enter interpretation / findings…"
+                    />
+                  </div>
+                ))}
               </div>
             );
           })}

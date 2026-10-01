@@ -105,6 +105,17 @@ const Client = sequelize.define('Client', {
   qrPaymentRequired: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   reportLogoPath: { type: DataTypes.STRING },
   reportLetterheadPath: { type: DataTypes.STRING },
+  // What a client's own staff set from Report Branding, shown on bills/lab
+  // reports - deliberately separate from clientName/address/mobile/email
+  // above (which Chief Admin sets at client creation for its own records),
+  // since a clinic's patient-facing display name/branch address can
+  // legitimately differ from what Chief Admin has on file for them. Falls
+  // back to the fields above wherever null, so a brand-new client's bills
+  // still show something before anyone's customized it.
+  brandingName: { type: DataTypes.STRING },
+  brandingAddress: { type: DataTypes.STRING },
+  brandingMobile: { type: DataTypes.STRING },
+  brandingEmail: { type: DataTypes.STRING },
   // Chief-Admin-controlled: whether this clinic's Front Office can cancel a
   // billed test and record a refund against it. Off by default since it
   // touches money - a clinic has to be explicitly opted in.
@@ -120,6 +131,10 @@ const Client = sequelize.define('Client', {
   // How many days after the bill's walk-in date a post-billing discount stays
   // allowed. 0 means no limit. Only meaningful when allowPostBillingDiscount is on.
   postDiscountAllowedDays: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  // Pre-fills the GST % at billing time for this clinic (Front Office can
+  // still override per bill). 0 (the default) means this clinic doesn't
+  // charge GST at all - most diagnostic labs are tax-exempt, so this is opt-in.
+  defaultGstPercent: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 0 },
   ...AUDIT_FIELDS,
 }, { tableName: 'client' });
 
@@ -239,6 +254,15 @@ const ParameterMaster = sequelize.define('ParameterMaster', {
   // The default range, used whenever no age/gender-specific rule below matches.
   normalRangeLow: { type: DataTypes.STRING },
   normalRangeHigh: { type: DataTypes.STRING },
+  // Free-text clinical notes about this parameter (interpretation, significance, etc.) - long-form, so TEXT not STRING.
+  description: { type: DataTypes.TEXT },
+  // True for a qualitative parameter (e.g. a Widal titer conclusion, a
+  // culture & sensitivity report, USG findings) whose entered Result is a
+  // free-text paragraph rather than a number - result entry gets a large
+  // textarea instead of a small value input, normalRangeLow/High don't
+  // apply, and the report prints it as its own block below the test's
+  // normal parameter table instead of as a Value/Unit/Range row.
+  isInterpretation: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
   ...AUDIT_FIELDS,
 }, { tableName: 'parameter_master' });
 
@@ -415,6 +439,13 @@ const Bill = sequelize.define('Bill', {
   // or a post-billing discount that was itself cancelled). Recovered via
   // DuePayment below; a report can't be released while this is above 0.
   dueAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
+  // GST added on top of (totalAmount - discount) at billing time, split evenly
+  // into CGST + SGST per Indian tax convention. gstPercent of 0 (the default)
+  // means this bill has no tax at all - existing bills/clients are unaffected.
+  gstPercent: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 0 },
+  cgstAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
+  sgstAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
+  taxAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 }, // cgstAmount + sgstAmount, kept for easy display
   paymentMode: { type: DataTypes.STRING },
   visitAddress: { type: DataTypes.STRING },
   transactionNumber: { type: DataTypes.STRING },
@@ -492,7 +523,10 @@ const Sample = sequelize.define('Sample', {
 
 const Result = sequelize.define('Result', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-  value: { type: DataTypes.STRING },
+  // TEXT, not STRING (which defaults to VARCHAR(255)) - a free-text
+  // interpretation result (e.g. a culture & sensitivity paragraph) can
+  // easily run past 255 characters.
+  value: { type: DataTypes.TEXT },
   isAbnormal: { type: DataTypes.BOOLEAN, defaultValue: false },
   ...AUDIT_FIELDS,
 }, { tableName: 'result' });
@@ -500,12 +534,19 @@ const Result = sequelize.define('Result', {
 const Report = sequelize.define('Report', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   status: {
-    type: DataTypes.ENUM('PENDING', 'VERIFIED', 'RELEASED'),
+    type: DataTypes.ENUM('PENDING', 'VERIFIED', 'RELEASED', 'REVOKED'),
     allowNull: false,
     defaultValue: 'PENDING',
   },
   verifiedAt: { type: DataTypes.DATE },
   releasedAt: { type: DataTypes.DATE },
+  // Set when a released report is later revoked (e.g. a mistake was found) -
+  // kept as a record rather than cleared, same "stamp, don't delete" idea as
+  // BillDiscount.cancelledAt. The underlying Sample rolls back to VERIFIED so
+  // it can be corrected and released again; these two fields stay as the
+  // historical record of the earlier revoke even after that happens.
+  revokedAt: { type: DataTypes.DATE },
+  revokedReason: { type: DataTypes.STRING },
   ...AUDIT_FIELDS,
 }, { tableName: 'report' });
 

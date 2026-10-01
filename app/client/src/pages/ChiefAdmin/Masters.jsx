@@ -8,7 +8,7 @@ const AGE_UNIT_OPTIONS = ['Years', 'Months', 'Days'];
 const AGE_UNIT_ABBR = { Years: 'y', Months: 'm', Days: 'd' };
 const emptyRangeRow = () => ({ gender: 'Any', ageMin: '', ageMax: '', ageUnit: 'Years', normalRangeLow: '', normalRangeHigh: '' });
 const blankTestForm = () => ({ testCode: '', testName: '', category: '', sampleType: '' });
-const blankParamForm = () => ({ parameterName: '', unit: '', method: '' });
+const blankParamForm = () => ({ parameterName: '', unit: '', method: '', isInterpretation: false });
 // Narrower than the app-wide .form-grid default (minmax 200px) so Gender/Age/Unit/Range fields
 // wrap two-three to a row instead of stacking one-per-row on a narrow/mobile screen.
 const rangeGridStyle = { alignItems: 'end', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))' };
@@ -21,6 +21,9 @@ function pillClass(gender) {
 
 /** Every age/gender-specific rule shown as its own pill, or the parameter's flat default range if it has none. */
 function RangeMatrix({ param }) {
+  if (param.isInterpretation) {
+    return <span className="range-pill interpretation">Free-text interpretation</span>;
+  }
   const ranges = param.ParameterNormalRanges || [];
   if (ranges.length === 0) {
     return <span className="range-pill neutral">{param.normalRangeLow || '—'}–{param.normalRangeHigh || '—'} {param.unit || ''}</span>;
@@ -181,8 +184,8 @@ export default function Masters() {
     e.preventDefault();
     if (savingParam) return; // guard against rapid double-submit creating a duplicate parameter
     setError('');
-    const normalRanges = rangeRows.filter((r) => r.normalRangeLow || r.normalRangeHigh);
-    if (normalRanges.length === 0) {
+    const normalRanges = paramForm.isInterpretation ? [] : rangeRows.filter((r) => r.normalRangeLow || r.normalRangeHigh);
+    if (!paramForm.isInterpretation && normalRanges.length === 0) {
       setError('At least one age/gender range (with a Range Low or Range High value) is required.');
       return;
     }
@@ -254,7 +257,8 @@ export default function Masters() {
   async function handleBulkCommit() {
     const rows = bulkPreview.preview.filter((r) => r.valid).map((r) => ({
       testCode: r.testCode, testName: r.testName, testCategory: r.testCategory, sampleType: r.sampleType,
-      parameterName: r.parameterName, unit: r.unit, method: r.method, normalRangeLow: r.normalRangeLow, normalRangeHigh: r.normalRangeHigh,
+      parameterName: r.parameterName, unit: r.unit, method: r.method, isInterpretation: r.isInterpretation,
+      normalRangeLow: r.normalRangeLow, normalRangeHigh: r.normalRangeHigh,
       gender: r.gender, ageMin: r.ageMin, ageMax: r.ageMax, ageUnit: r.ageUnit, rangeLow: r.rangeLow, rangeHigh: r.rangeHigh,
     }));
     const { data } = await api.post('/admin/masters/tests/upload/commit', { rows });
@@ -436,40 +440,57 @@ export default function Masters() {
                 </label>
               </div>
 
-              <div style={{ marginTop: 10 }}>
-                <p style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>
-                  Age/gender-specific ranges (e.g. Male 18-60, Female 18-60) - at least one is required, since this is
-                  the only way a normal range is set for this parameter.
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+                <input
+                  type="checkbox"
+                  checked={paramForm.isInterpretation}
+                  onChange={(e) => setParamForm((f) => ({ ...f, isInterpretation: e.target.checked }))}
+                  style={{ width: 16, height: 16 }}
+                />
+                <span>This is a free-text interpretation parameter (e.g. a Widal conclusion, culture &amp; sensitivity report) - no numeric value or normal range</span>
+              </label>
+
+              {paramForm.isInterpretation ? (
+                <p style={{ fontSize: 13, color: '#64748b', marginTop: 10 }}>
+                  Result entry will show a large text box for this parameter instead of a numeric value, and it'll
+                  print as its own block below the test's result table on the report.
                 </p>
-                {rangeRows.map((r, idx) => (
-                  <div key={idx} className="form-grid" style={rangeGridStyle}>
-                    <label><span>Gender</span>
-                      <select value={r.gender} onChange={(e) => updateRangeRow(idx, 'gender', e.target.value)}>
-                        {GENDER_OPTIONS.map((g) => <option key={g}>{g}</option>)}
-                      </select>
-                    </label>
-                    <label><span>Age From</span>
-                      <input type="number" min="0" value={r.ageMin} onChange={(e) => updateRangeRow(idx, 'ageMin', e.target.value)} />
-                    </label>
-                    <label><span>Age To</span>
-                      <input type="number" min="0" value={r.ageMax} onChange={(e) => updateRangeRow(idx, 'ageMax', e.target.value)} />
-                    </label>
-                    <label><span>Age Unit</span>
-                      <select value={r.ageUnit} onChange={(e) => updateRangeRow(idx, 'ageUnit', e.target.value)}>
-                        {AGE_UNIT_OPTIONS.map((u) => <option key={u}>{u}</option>)}
-                      </select>
-                    </label>
-                    <label><span>Range Low</span>
-                      <input value={r.normalRangeLow} onChange={(e) => updateRangeRow(idx, 'normalRangeLow', e.target.value)} />
-                    </label>
-                    <label><span>Range High</span>
-                      <input value={r.normalRangeHigh} onChange={(e) => updateRangeRow(idx, 'normalRangeHigh', e.target.value)} />
-                    </label>
-                    <button type="button" className="secondary" onClick={() => removeRangeRow(idx)}>Remove</button>
-                  </div>
-                ))}
-                <button type="button" className="secondary" onClick={addRangeRow}>+ Add Age/Gender Range</button>
-              </div>
+              ) : (
+                <div style={{ marginTop: 10 }}>
+                  <p style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>
+                    Age/gender-specific ranges (e.g. Male 18-60, Female 18-60) - at least one is required, since this is
+                    the only way a normal range is set for this parameter.
+                  </p>
+                  {rangeRows.map((r, idx) => (
+                    <div key={idx} className="form-grid" style={rangeGridStyle}>
+                      <label><span>Gender</span>
+                        <select value={r.gender} onChange={(e) => updateRangeRow(idx, 'gender', e.target.value)}>
+                          {GENDER_OPTIONS.map((g) => <option key={g}>{g}</option>)}
+                        </select>
+                      </label>
+                      <label><span>Age From</span>
+                        <input type="number" min="0" value={r.ageMin} onChange={(e) => updateRangeRow(idx, 'ageMin', e.target.value)} />
+                      </label>
+                      <label><span>Age To</span>
+                        <input type="number" min="0" value={r.ageMax} onChange={(e) => updateRangeRow(idx, 'ageMax', e.target.value)} />
+                      </label>
+                      <label><span>Age Unit</span>
+                        <select value={r.ageUnit} onChange={(e) => updateRangeRow(idx, 'ageUnit', e.target.value)}>
+                          {AGE_UNIT_OPTIONS.map((u) => <option key={u}>{u}</option>)}
+                        </select>
+                      </label>
+                      <label><span>Range Low</span>
+                        <input value={r.normalRangeLow} onChange={(e) => updateRangeRow(idx, 'normalRangeLow', e.target.value)} />
+                      </label>
+                      <label><span>Range High</span>
+                        <input value={r.normalRangeHigh} onChange={(e) => updateRangeRow(idx, 'normalRangeHigh', e.target.value)} />
+                      </label>
+                      <button type="button" className="secondary" onClick={() => removeRangeRow(idx)}>Remove</button>
+                    </div>
+                  ))}
+                  <button type="button" className="secondary" onClick={addRangeRow}>+ Add Age/Gender Range</button>
+                </div>
+              )}
 
               <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
                 <button type="submit" disabled={savingParam}>{savingParam ? 'Adding…' : 'Add Parameter'}</button>
@@ -540,11 +561,12 @@ export default function Masters() {
       <div className="card">
         <h3>Bulk Upload — Tests &amp; Parameters</h3>
         <p style={{ fontSize: 13, color: '#64748b' }}>
-          Columns: TEST_CODE, TEST_NAME, TEST_CATEGORY, SAMPLE_TYPE, PARAMETER_NAME, UNIT, METHOD, NORMAL_RANGE_LOW,
-          NORMAL_RANGE_HIGH, GENDER, AGE_MIN, AGE_MAX, AGE_UNIT, RANGE_LOW, RANGE_HIGH. One row per parameter (or per
-          age/gender-specific range rule, if RANGE_LOW/RANGE_HIGH are filled in — repeat the same
+          Columns: TEST_CODE, TEST_NAME, TEST_CATEGORY, SAMPLE_TYPE, PARAMETER_NAME, UNIT, METHOD, IS_INTERPRETATION,
+          NORMAL_RANGE_LOW, NORMAL_RANGE_HIGH, GENDER, AGE_MIN, AGE_MAX, AGE_UNIT, RANGE_LOW, RANGE_HIGH. One row per
+          parameter (or per age/gender-specific range rule, if RANGE_LOW/RANGE_HIGH are filled in — repeat the same
           TEST_CODE/PARAMETER_NAME on extra rows to add several rules, e.g. Male 18-60 and Female 18-60).
-          Leave PARAMETER_NAME blank to just create the test.
+          Leave PARAMETER_NAME blank to just create the test. Set IS_INTERPRETATION to "Y" for a qualitative,
+          free-text parameter (e.g. a Widal conclusion) — its range columns are ignored.
         </p>
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <button type="button" className="secondary" onClick={() => downloadFile('/admin/masters/tests/template', 'test-parameter-template.xlsx')}>

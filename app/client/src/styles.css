@@ -381,6 +381,46 @@ input, select, textarea {
 .branding-preview img { max-width: 220px; max-height: 120px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; padding: 8px; }
 .branding-preview figcaption { font-size: 12px; color: #64748b; margin-top: 6px; }
 
+/* Bill Cum Receipt - one continuous bordered box (header, title, items,
+   totals) like a lab's existing paper/PDF bill stationery, rather than
+   several separate floating cards - only the "amount in words" line sits
+   outside it, matching the reference layout. */
+.bill-receipt-box { border: 1px solid #1a1a1a; border-radius: 4px; overflow: hidden; }
+.bill-receipt-header {
+  display: grid; grid-template-columns: 160px 1fr; border-bottom: 1px solid #1a1a1a;
+}
+.bill-receipt-logo {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  padding: 10px; border-right: 1px solid #1a1a1a;
+}
+.bill-receipt-logo img { max-width: 100%; max-height: 90px; object-fit: contain; }
+.bill-receipt-logo-fallback { font-weight: 800; font-size: 15px; text-align: center; color: #1a1a1a; }
+.bill-receipt-info { display: grid; grid-template-columns: 1fr 1fr; }
+.bill-receipt-info > div {
+  display: flex; gap: 6px; padding: 6px 10px; border-bottom: 1px solid #e2e8f0; font-size: 12.5px;
+}
+.bill-receipt-info > div:nth-last-child(-n+2) { border-bottom: none; }
+.bill-receipt-info span { color: #475569; flex-shrink: 0; }
+.bill-receipt-info span::after { content: ':'; margin-left: 4px; }
+.bill-receipt-info strong { font-weight: 700; }
+.bill-receipt-title { text-align: center; margin: 0; padding: 8px; font-size: 16px; letter-spacing: 0.02em; border-bottom: 1px solid #1a1a1a; }
+.bill-receipt-client-contact { text-align: center; margin: 0; font-size: 11px; color: #64748b; line-height: 1.4; }
+.bill-receipt-table { border: none; }
+.bill-receipt-table th, .bill-receipt-table td { border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+.bill-receipt-table th { background: #f8fafc; text-transform: uppercase; font-size: 11px; letter-spacing: 0.03em; }
+.bill-receipt-table .bill-receipt-total-row td { border-bottom: none; border-top: 1px solid #1a1a1a; font-weight: 700; }
+.bill-receipt-footer {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 12px;
+  border-top: 1px solid #1a1a1a;
+}
+.bill-receipt-words { font-size: 13px; line-height: 1.7; margin: 0; }
+.bill-receipt-summary { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: 13px; flex-shrink: 0; }
+.bill-receipt-summary > div { display: flex; gap: 14px; min-width: 240px; justify-content: space-between; }
+.bill-receipt-summary span { color: #475569; }
+.bill-receipt-summary strong { font-weight: 700; }
+.bill-receipt-net { border-top: 1px solid #cbd5e1; padding-top: 4px; margin-top: 2px; font-size: 14px; }
+.bill-receipt-due strong { color: #dc2626; }
+
 .expiry-banner {
   display: flex; align-items: center; gap: 10px;
   padding: 12px 16px; border-radius: 10px; font-size: 14px; margin-bottom: 16px;
@@ -590,6 +630,13 @@ input, select, textarea {
 .review-param-card input.abnormal { border-color: #dc2626; color: #dc2626; }
 .review-param-card .p-unit { font-size: 12px; color: #64748b; }
 
+.review-interpretation-card { background: #f8fafc; border-radius: 10px; padding: 14px 16px; margin-top: 14px; }
+.review-interpretation-card .p-name { font-weight: 700; font-size: 13px; color: #1a1a1a; margin-bottom: 8px; }
+.review-interpretation-card textarea {
+  width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #cbd5e1; font-family: inherit;
+  font-size: 14px; resize: vertical;
+}
+
 .review-footer {
   border-top: 1px solid #e2e8f0; padding: 14px 22px; display: flex; align-items: center; justify-content: space-between;
   flex-shrink: 0;
@@ -638,6 +685,7 @@ input, select, textarea {
 .range-pill.male { background: #dbeafe; color: #1e40af; }
 .range-pill.female { background: #fce7f3; color: #9d174d; }
 .range-pill.neutral { background: #f1f5f9; color: #475569; }
+.range-pill.interpretation { background: #ede9fe; color: #6d28d9; }
 .icon-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; padding: 0; background: #f1f5f9; color: #475569;
