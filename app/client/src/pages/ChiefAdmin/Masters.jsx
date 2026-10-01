@@ -269,7 +269,7 @@ export default function Masters() {
           </div>
           <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
             <option value="All">All groups ({tests.length})</option>
-            {categories.map((c) => (
+            {groupOptions.map((c) => (
               <option key={c} value={c}>{c} ({tests.filter((t) => t.category === c).length})</option>
             ))}
           </select>
