@@ -93,6 +93,8 @@ export default function Laboratory() {
   const [samples, setSamples] = useState([]);
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const [viewMode, setViewMode] = useState('cards'); // cards | list
   const [reviewGroup, setReviewGroup] = useState(null); // bill group open in the full-screen Review Results panel
   const [reviewFocusId, setReviewFocusId] = useState(null); // which test within it starts focused
@@ -120,16 +122,20 @@ export default function Laboratory() {
     return { total, cancelled, done, pending: total - done - cancelled };
   }, [samples]);
 
-  // Newest-first, filtered by status tab and the search box - shared by both
-  // the flat List view and the grouped Cards view below.
+  // Newest-first, filtered by status tab, the search box, and the walk-in
+  // date range - shared by both the flat List view and the grouped Cards
+  // view below.
   const visibleSamples = useMemo(() => {
     const q = search.trim();
     const bucket = TAB_STATUSES[statusFilter];
-    const list = samples.filter((s) => (
-      (!bucket || bucket.includes(s.status)) && matchesSearch(s, q)
-    ));
+    const list = samples.filter((s) => {
+      const walkInDate = s.BillItem?.Bill?.walkInDate;
+      const matchesFrom = !fromDate || !walkInDate || walkInDate >= fromDate;
+      const matchesTo = !toDate || !walkInDate || walkInDate <= toDate;
+      return (!bucket || bucket.includes(s.status)) && matchesSearch(s, q) && matchesFrom && matchesTo;
+    });
     return [...list].sort((a, b) => b.id - a.id);
-  }, [samples, statusFilter, search]);
+  }, [samples, statusFilter, search, fromDate, toDate]);
 
   const visibleGroups = useMemo(() => groupByBill(visibleSamples), [visibleSamples]);
 
@@ -226,6 +232,13 @@ export default function Laboratory() {
           <div className="stat-chip cancelled"><span className="stat-value">{counts.cancelled}</span><span className="stat-label">Cancel</span></div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="df-field"><span>From</span><input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} /></div>
+          <div className="df-field"><span>To</span><input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} /></div>
+          {(fromDate || toDate) && (
+            <button type="button" className="secondary" style={{ padding: '5px 12px', fontSize: 12.5, height: 32 }} onClick={() => { setFromDate(''); setToDate(''); }}>
+              Clear
+            </button>
+          )}
           <input
             placeholder="Search patient, UMR or sample…"
             value={search}

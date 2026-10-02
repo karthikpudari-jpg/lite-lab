@@ -198,13 +198,13 @@ export default function Orders() {
           <div className="stat-chip cancelled"><span className="stat-value">{testCounts.cancelled}</span><span className="stat-label">Cancel</span></div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}>
-            From <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-          </label>
-          <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}>
-            To <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-          </label>
-          {(fromDate || toDate) && <button type="button" onClick={() => { setFromDate(''); setToDate(''); }}>Clear dates</button>}
+          <div className="df-field"><span>From</span><input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} /></div>
+          <div className="df-field"><span>To</span><input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} /></div>
+          {(fromDate || toDate) && (
+            <button type="button" className="secondary" style={{ padding: '5px 12px', fontSize: 12.5, height: 32 }} onClick={() => { setFromDate(''); setToDate(''); }}>
+              Clear
+            </button>
+          )}
           <input placeholder="Search by Order ID, UMR, name or mobile…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 260, maxWidth: '100%' }} />
           {canConfigure && <button type="button" onClick={() => setShowSettings(true)}>⚙ Settings</button>}
         </div>
