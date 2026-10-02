@@ -22,11 +22,12 @@ body {
 }
 .sidebar nav { flex: 1; }
 .sidebar-footer-brand {
-  display: flex; align-items: center; gap: 8px;
-  margin-top: 16px; padding: 14px 6px 2px; border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 16px; padding: 14px 8px; border-top: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04); border-radius: 10px;
 }
-.sidebar-footer-brand img { width: 30px; height: auto; flex-shrink: 0; }
-.sidebar-footer-brand span { font-size: 10.5px; line-height: 1.35; color: #9fb0d1; }
+.sidebar-footer-brand img { width: 34px; height: auto; flex-shrink: 0; }
+.sidebar-footer-brand span { font-size: 12.5px; font-weight: 700; line-height: 1.35; color: #e7ecf7; }
 .sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 0 6px; margin-bottom: 22px; }
 .sidebar-brand .mark-icon {
   width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0;
