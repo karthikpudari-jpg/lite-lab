@@ -98,6 +98,11 @@ export default function Laboratory() {
   const [reviewFocusId, setReviewFocusId] = useState(null); // which test within it starts focused
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [confirmRelease, setConfirmRelease] = useState(null); // samples[] pending a release confirmation, or null
+  const [revokeFor, setRevokeFor] = useState(null); // sample being revoked, or null
+  const [revokeReason, setRevokeReason] = useState('');
+  const [revokeError, setRevokeError] = useState('');
+  const [revokeSaving, setRevokeSaving] = useState(false);
 
   // Always loaded unfiltered - the status tabs below filter client-side so the
   // counts strip (Total/Pending/Done/Cancelled) can keep reflecting every
@@ -172,11 +177,39 @@ export default function Laboratory() {
       // Only the still-VERIFIED tests need releasing - an already-RELEASED one
       // in the same bucket (Report Release covers both) would 400 if re-sent.
       const toRelease = group.samples.filter((s) => s.status === 'VERIFIED');
-      runAction(() => Promise.all(toRelease.map((s) => doAction(s, 'release'))));
+      setConfirmRelease(toRelease);
     } else if (kind === 'report') {
       navigate(`/app/report/${group.billId}`);
     } else {
       openReview(billGroupsById.get(group.billId) || group);
+    }
+  }
+
+  function handleConfirmRelease() {
+    const toRelease = confirmRelease;
+    setConfirmRelease(null);
+    runAction(() => Promise.all(toRelease.map((s) => doAction(s, 'release'))));
+  }
+
+  function openRevoke(sample) {
+    setRevokeFor(sample);
+    setRevokeReason('');
+    setRevokeError('');
+  }
+
+  async function handleRevoke(e) {
+    e.preventDefault();
+    if (revokeSaving) return; // guard against a rapid double-submit
+    setRevokeError('');
+    setRevokeSaving(true);
+    try {
+      await api.put(`/lab/samples/${revokeFor.id}/revoke`, { reason: revokeReason });
+      setRevokeFor(null);
+      await load();
+    } catch (err) {
+      setRevokeError(err.response?.data?.message || 'Failed to revoke report');
+    } finally {
+      setRevokeSaving(false);
     }
   }
 
@@ -253,13 +286,25 @@ export default function Laboratory() {
                       {s.status === 'RESULT_ENTERED' ? 'Verify' : 'Results'}
                     </button>
                   )}
-                  {s.status === 'VERIFIED' && <button onClick={() => runAction(() => doAction(s, 'release'))} disabled={busy}>Release</button>}
-                  {s.status === 'RELEASED' && bill && (
-                    <button className="secondary" onClick={() => navigate(`/app/report/${bill.id}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <Icon name="print" size={14} /> Report
+                  {s.status === 'VERIFIED' && (
+                    <button onClick={() => setConfirmRelease([s])} disabled={busy}>
+                      {s.Report?.status === 'REVOKED' ? 'Release Again' : 'Release'}
                     </button>
                   )}
+                  {s.status === 'RELEASED' && bill && (
+                    <>
+                      <button className="secondary" onClick={() => navigate(`/app/report/${bill.id}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <Icon name="print" size={14} /> Report
+                      </button>
+                      <button className="secondary danger" onClick={() => openRevoke(s)} disabled={busy}>Revoke</button>
+                    </>
+                  )}
                 </div>
+                {s.status === 'VERIFIED' && s.Report?.status === 'REVOKED' && (
+                  <p style={{ gridColumn: '1 / -1', fontSize: 12, color: '#b91c1c', margin: '4px 0 0' }}>
+                    Previously revoked: {s.Report.revokedReason}
+                  </p>
+                )}
               </div>
             );
           })}
@@ -274,6 +319,13 @@ export default function Laboratory() {
               !max || new Date(s.updatedAt) > new Date(max.updatedAt) ? s : max
             ), null);
             const actionKind = cardActionFor(g);
+            // The single CTA button above only surfaces the group's one "next
+            // step" action (e.g. Release once everything's VERIFIED), which
+            // hid two things list view already has: editing results that are
+            // VERIFIED-but-not-yet-released, and revoking an already-RELEASED
+            // one. Both need their own entry point here regardless of actionKind.
+            const hasVerified = g.samples.some((s) => s.status === 'VERIFIED');
+            const releasedSample = g.samples.find((s) => s.status === 'RELEASED');
             return (
               <div className="lab-card2" key={g.billId}>
                 <div className="lab-card2-head">
@@ -311,6 +363,16 @@ export default function Laboratory() {
                   >
                     <Icon name="orders" size={15} />
                   </button>
+                  {hasVerified && actionKind !== 'review' && (
+                    <button type="button" className="secondary" disabled={busy} onClick={() => openReview(g)}>
+                      Edit Results
+                    </button>
+                  )}
+                  {releasedSample && (
+                    <button type="button" className="secondary danger" disabled={busy} onClick={() => openRevoke(releasedSample)}>
+                      Revoke
+                    </button>
+                  )}
                   <button type="button" className="cta-btn" disabled={busy} onClick={() => runCardAction(g)}>
                     {CARD_ACTION_LABEL[actionKind]}
                   </button>
@@ -319,6 +381,48 @@ export default function Laboratory() {
             );
           })}
           {visibleGroups.length === 0 && <p>No samples.</p>}
+        </div>
+      )}
+
+      {confirmRelease && (
+        <div className="modal-overlay" onClick={() => setConfirmRelease(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <h2>Confirm Report Release</h2>
+            <p>
+              You're about to release {confirmRelease.length === 1 ? 'this report' : `these ${confirmRelease.length} reports`} —
+              once released, the patient/front office can view and print {confirmRelease.length === 1 ? 'it' : 'them'}. This can be undone later with Revoke if needed.
+            </p>
+            <ul style={{ fontSize: 13, color: '#334155', paddingLeft: 18, margin: '0 0 16px' }}>
+              {confirmRelease.map((s) => <li key={s.id}>{s.BillItem?.TestMaster?.testName}</li>)}
+            </ul>
+            {error && <p className="error-text">{error}</p>}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" className="secondary" onClick={() => setConfirmRelease(null)} disabled={busy}>Cancel</button>
+              <button type="button" onClick={handleConfirmRelease} disabled={busy}>{busy ? 'Releasing…' : 'Confirm & Release'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {revokeFor && (
+        <div className="modal-overlay" onClick={() => setRevokeFor(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <h2>Revoke Released Report</h2>
+            <p style={{ fontSize: 13, color: '#64748b' }}>
+              {revokeFor.BillItem?.TestMaster?.testName} will no longer be visible on the patient's report until it's
+              corrected and released again. This is kept as a record, not deleted.
+            </p>
+            <form onSubmit={handleRevoke}>
+              <label><span>Reason (required)</span>
+                <input value={revokeReason} onChange={(e) => setRevokeReason(e.target.value)} required autoFocus />
+              </label>
+              {revokeError && <p className="error-text">{revokeError}</p>}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+                <button type="button" className="secondary" onClick={() => setRevokeFor(null)} disabled={revokeSaving}>Cancel</button>
+                <button type="submit" className="danger" disabled={revokeSaving}>{revokeSaving ? 'Revoking…' : 'Revoke Report'}</button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
