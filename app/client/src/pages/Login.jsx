@@ -58,6 +58,70 @@ function IconCheck() {
   );
 }
 
+function Gear({ cx, cy, r, toothLen, opacity }) {
+  const teeth = [0, 45, 90, 135, 180, 225, 270, 315];
+  return (
+    <g transform={`translate(${cx},${cy})`} opacity={opacity}>
+      {teeth.map((a) => (
+        <rect key={a} x={-r * 0.16} y={-r - toothLen} width={r * 0.32} height={toothLen + 2} rx={r * 0.08} fill="#ffffff" transform={`rotate(${a})`} />
+      ))}
+      <circle r={r} fill="none" stroke="#ffffff" strokeWidth={r * 0.22} />
+      <circle r={r * 0.32} fill="#ffffff" />
+    </g>
+  );
+}
+
+function LoginIllustration() {
+  return (
+    <svg viewBox="0 0 320 240" className="login-brand-illustration" aria-hidden="true">
+      <rect x="8" y="8" width="304" height="224" rx="28" fill="#ffffff" opacity="0.07" />
+
+      {/* desk */}
+      <rect x="40" y="178" width="220" height="9" rx="4" fill="#ffffff" opacity="0.9" />
+      <rect x="56" y="187" width="8" height="26" rx="2" fill="#ffffff" opacity="0.55" />
+      <rect x="224" y="187" width="8" height="26" rx="2" fill="#ffffff" opacity="0.55" />
+
+      {/* chair back */}
+      <rect x="216" y="118" width="9" height="66" rx="4" fill="#ffffff" opacity="0.45" />
+
+      {/* person */}
+      <path d="M190 188 q-1 -42 30 -42 q30 0 29 42 z" fill="#ffffff" />
+      <circle cx="219" cy="124" r="15" fill="#ffd9b3" />
+      <path d="M204 121 q0 -19 15 -19 q15 0 15 19 q-5 -9 -15 -9 q-10 0 -15 9 z" fill="#2a1d14" />
+
+      {/* laptop (drawn after the person so it sits in front, on the desk) */}
+      <path d="M184 178 L254 178 L249 170 L189 170 Z" fill="#ffffff" opacity="0.95" />
+      <rect x="194" y="132" width="50" height="38" rx="4" fill="#ffffff" />
+      <rect x="199" y="137" width="40" height="28" rx="2" fill="#0d9488" />
+
+      {/* ID cards */}
+      <g transform="translate(34,34) rotate(-10)">
+        <rect width="48" height="64" rx="7" fill="#ffffff" />
+        <circle cx="24" cy="21" r="10" fill="#14b8a6" />
+        <rect x="11" y="38" width="26" height="4" rx="2" fill="#cbd5e1" />
+        <rect x="11" y="46" width="20" height="4" rx="2" fill="#cbd5e1" />
+        <rect x="11" y="54" width="24" height="4" rx="2" fill="#cbd5e1" />
+      </g>
+      <g transform="translate(78,20) rotate(6)">
+        <rect width="48" height="64" rx="7" fill="#ffffff" />
+        <circle cx="24" cy="21" r="10" fill="#0f766e" />
+        <rect x="11" y="38" width="26" height="4" rx="2" fill="#cbd5e1" />
+        <rect x="11" y="46" width="20" height="4" rx="2" fill="#cbd5e1" />
+        <rect x="11" y="54" width="24" height="4" rx="2" fill="#cbd5e1" />
+      </g>
+
+      {/* gears */}
+      <Gear cx={256} cy={52} r={15} toothLen={6} opacity={0.85} />
+      <Gear cx={284} cy={84} r={9} toothLen={4} opacity={0.6} />
+
+      {/* sparkle dots */}
+      <circle cx="58" cy="100" r="3" fill="#ffffff" opacity="0.55" />
+      <circle cx="292" cy="150" r="3" fill="#ffffff" opacity="0.45" />
+      <circle cx="120" cy="18" r="2.5" fill="#ffffff" opacity="0.5" />
+    </svg>
+  );
+}
+
 const FEATURES = [
   'Patient billing, receipts & subscription recharge',
   'Lab result entry, verification & branded reports',
@@ -135,7 +199,7 @@ export default function Login() {
           <div className="login-brand-mark">
             LIMS
           </div>
-          <h1>Everything your diagnostics lab needs, in one place.</h1>
+          <LoginIllustration />
           <ul className="login-brand-features">
             {FEATURES.map((f) => (
               <li key={f}><span className="feat-dot"><IconCheck /></span>{f}</li>
