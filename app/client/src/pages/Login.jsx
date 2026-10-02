@@ -59,9 +59,10 @@ function IconCheck() {
 }
 
 const FEATURES = [
-  'Multi-client subscription & recharge billing',
+  'Patient billing, receipts & subscription recharge',
+  'Lab result entry, verification & branded reports',
+  'AI-powered trend insights on every report',
   'Role-based access across every module',
-  'End-to-end lab workflow, billing and reports',
 ];
 
 function blankSignup() {
@@ -134,11 +135,7 @@ export default function Login() {
           <div className="login-brand-mark">
             LIMS
           </div>
-          <h1>Run your diagnostics business on one connected platform.</h1>
-          <p className="tagline">
-            Client subscriptions, billing, lab workflow and reporting, tied together with a monthly
-            recharge model that keeps access and payments in sync automatically.
-          </p>
+          <h1>Everything your diagnostics lab needs, in one place.</h1>
           <ul className="login-brand-features">
             {FEATURES.map((f) => (
               <li key={f}><span className="feat-dot"><IconCheck /></span>{f}</li>
