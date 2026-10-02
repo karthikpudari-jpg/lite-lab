@@ -95,14 +95,19 @@ function LoginIllustration() {
       <rect x="199" y="137" width="40" height="28" rx="2" fill="#0d9488" />
 
       {/* microscope, on the desk between the ID cards and the laptop */}
-      <rect x="92" y="120" width="52" height="68" rx="6" fill="#ffffff" />
-      <g transform="translate(92,120)">
-        <ellipse cx="26" cy="58" rx="16" ry="5" fill="#f59e0b" />
-        <rect x="21" y="46" width="10" height="14" rx="2" fill="#94a3b8" />
-        <rect x="10" y="40" width="30" height="5" rx="2" fill="#e2e8f0" />
-        <rect x="16" y="37" width="12" height="3" rx="1" fill="#0d9488" />
-        <rect x="-6" y="-17" width="13" height="36" rx="6" fill="#2563eb" transform="translate(30,30) rotate(-22)" />
-        <circle cx="35" cy="6" r="5" fill="#1d4ed8" />
+      <rect x="86" y="108" width="62" height="80" rx="8" fill="#ffffff" />
+      <g transform="translate(86,108)">
+        {/* foot */}
+        <rect x="14" y="64" width="34" height="9" rx="4.5" fill="#f59e0b" />
+        {/* stand */}
+        <rect x="27" y="50" width="8" height="16" rx="2" fill="#94a3b8" />
+        {/* stage + slide */}
+        <rect x="8" y="43" width="44" height="7" rx="3.5" fill="#e2e8f0" />
+        <rect x="15" y="40" width="16" height="3.5" rx="1.5" fill="#0d9488" />
+        {/* diagonal body tube */}
+        <rect x="-9" y="-22" width="18" height="44" rx="9" fill="#2563eb" transform="translate(36,28) rotate(-25)" />
+        {/* eyepiece */}
+        <circle cx="27" cy="9" r="8" fill="#1d4ed8" />
       </g>
 
       {/* ID cards */}
