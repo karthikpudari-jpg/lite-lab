@@ -95,8 +95,7 @@ function LoginIllustration() {
       <rect x="199" y="137" width="40" height="28" rx="2" fill="#0d9488" />
 
       {/* microscope, on the desk between the ID cards and the laptop */}
-      <rect x="86" y="108" width="62" height="80" rx="8" fill="#ffffff" />
-      <image href="/microscope-icon.png" x="90" y="121" width="54" height="54" />
+      <image href="/microscope-icon.png" x="88" y="126" width="58" height="58" />
 
       {/* ID cards */}
       <g transform="translate(34,34) rotate(-10)">
