@@ -222,9 +222,9 @@ input, select, textarea {
   justify-content: space-between;
   color: #fff;
   background:
-    radial-gradient(circle at 12% 12%, rgba(255, 255, 255, 0.18), transparent 40%),
-    radial-gradient(circle at 90% 85%, rgba(249, 115, 22, 0.25), transparent 50%),
-    linear-gradient(145deg, #4c1d95 0%, #7e22ce 45%, #c026d3 85%, #e94e9c 100%);
+    radial-gradient(circle at 12% 15%, rgba(255, 255, 255, 0.14), transparent 42%),
+    radial-gradient(circle at 92% 88%, rgba(255, 255, 255, 0.10), transparent 48%),
+    linear-gradient(150deg, #0f766e 0%, #0d9488 55%, #14b8a6 100%);
 }
 .login-brand::before {
   content: '';
@@ -237,21 +237,6 @@ input, select, textarea {
   transform: rotate(-4deg);
   pointer-events: none;
 }
-.login-brand-shapes {
-  position: absolute; left: -60px; bottom: -130px; width: 460px; height: 360px;
-  z-index: 0; pointer-events: none;
-}
-.login-brand-shapes .shape {
-  position: absolute; border-radius: 999px;
-  background: linear-gradient(135deg, #fb923c, #ec4899);
-  transform: rotate(-42deg);
-}
-.login-brand-shapes .s1 { width: 170px; height: 20px; left: 10px; bottom: 150px; opacity: 0.9; }
-.login-brand-shapes .s2 { width: 26px; height: 26px; left: 150px; bottom: 120px; opacity: 0.55; background: linear-gradient(135deg, #fbbf24, #fb7185); }
-.login-brand-shapes .s3 { width: 230px; height: 26px; left: 70px; bottom: 60px; opacity: 0.85; }
-.login-brand-shapes .s4 { width: 16px; height: 16px; left: 250px; bottom: 100px; opacity: 0.45; background: #fda4af; }
-.login-brand-shapes .s5 { width: 120px; height: 16px; left: 190px; bottom: 10px; opacity: 0.7; background: linear-gradient(135deg, #f472b6, #c026d3); }
-.login-brand-shapes .s6 { width: 14px; height: 14px; left: 40px; bottom: 30px; opacity: 0.4; background: #fcd34d; }
 .login-brand-top { position: relative; z-index: 1; }
 .login-brand-mark {
   display: inline-flex; align-items: center; gap: 10px;
@@ -281,7 +266,7 @@ input, select, textarea {
   background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.18);
   display: flex; align-items: center; justify-content: center;
 }
-.login-brand-footer { position: relative; z-index: 1; color: #7f8db3; font-size: 12px; }
+.login-brand-footer { position: relative; z-index: 1; color: rgba(255, 255, 255, 0.65); font-size: 12px; }
 
 .login-panel {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 32px 24px;
@@ -301,16 +286,20 @@ input, select, textarea {
 .login-card h1 { font-size: 21px; margin: 0 0 4px; color: #0f172a; }
 .login-card p { color: #64748b; font-size: 13px; margin: 0; }
 .login-card label { display: block; margin-bottom: 14px; font-size: 13px; }
-.login-card input, .login-card select { border-radius: 999px; }
+.login-card input, .login-card select { border-radius: 10px; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.login-card input:focus, .login-card select:focus {
+  outline: none; border-color: var(--brand-teal-light);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
+}
 .login-card label span { display: block; margin-bottom: 6px; font-weight: 600; color: #334155; }
 .input-with-icon { position: relative; display: flex; align-items: center; }
-.input-with-icon svg { position: absolute; left: 16px; color: #94a3b8; pointer-events: none; }
-.input-with-icon input { padding-left: 40px; border-radius: 999px; }
+.input-with-icon svg { position: absolute; left: 12px; color: #94a3b8; pointer-events: none; }
+.input-with-icon input { padding-left: 36px; }
 .input-with-icon input[type='password'],
 .input-with-icon input[data-pw] { padding-right: 38px; }
 .pw-toggle {
-  position: absolute; right: 8px; background: transparent; color: #94a3b8;
-  border: none; padding: 6px; border-radius: 999px; display: flex; cursor: pointer;
+  position: absolute; right: 6px; background: transparent; color: #94a3b8;
+  border: none; padding: 6px; border-radius: 8px; display: flex; cursor: pointer;
 }
 .pw-toggle:hover { background: #f1f5f9; color: #475569; }
 .segmented-toggle { display: flex; margin-bottom: 14px; border-radius: 10px; padding: 4px; background: #f1f5f9; gap: 4px; max-width: 420px; }
@@ -319,22 +308,22 @@ input, select, textarea {
 .segmented-toggle button.active { background: #fff; color: #1d2f6b; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08); }
 
 .login-toggle {
-  display: flex; margin-bottom: 22px; border-radius: 999px; padding: 4px; background: #f1f5f9; gap: 4px;
+  display: flex; margin-bottom: 22px; border-radius: 10px; padding: 4px; background: #f1f5f9; gap: 4px;
 }
 .login-toggle button {
-  flex: 1; background: transparent; color: #64748b; border-radius: 999px;
+  flex: 1; background: transparent; color: #64748b; border-radius: 7px;
   font-weight: 600; transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .login-toggle button:hover { background: rgba(255, 255, 255, 0.6); }
 .login-toggle button.active {
-  background: linear-gradient(135deg, #9333ea, #db2777);
-  color: #fff; box-shadow: 0 4px 10px -3px rgba(157, 23, 189, 0.5);
+  background: linear-gradient(135deg, var(--brand-teal), var(--brand-teal-light));
+  color: #fff; box-shadow: 0 4px 10px -3px rgba(15, 118, 110, 0.5);
 }
 .login-submit {
   width: 100%; margin-top: 8px; padding: 12px 14px; font-size: 14px; font-weight: 600;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #9333ea, #c026d3, #e94e9c);
-  box-shadow: 0 10px 20px -8px rgba(192, 38, 211, 0.55);
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--brand-teal), var(--brand-teal-light));
+  box-shadow: 0 10px 20px -8px rgba(15, 118, 110, 0.5);
   transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
 }
 .login-submit:hover:not(:disabled) { filter: brightness(1.05); transform: translateY(-1px); }
