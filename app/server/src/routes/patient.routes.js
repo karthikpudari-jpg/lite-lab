@@ -8,6 +8,7 @@ const patientCtrl = require('../controllers/patient.controller');
 router.use(authenticate, requireActiveSubscription, requireRole(ROLES.FRONT_OFFICE));
 
 router.post('/', patientCtrl.createPatient);
+router.put('/:id', patientCtrl.updatePatient);
 router.get('/', patientCtrl.listPatients);
 router.get('/lookup', patientCtrl.lookupPatient);
 

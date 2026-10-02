@@ -45,6 +45,37 @@ async function createPatient(req, res) {
   }
 }
 
+// PUT /api/patients/:id  - correcting a patient's own details (name, age,
+// gender, mobile, email, address) after the fact, e.g. a typo caught after
+// billing. The UMR itself is never editable here - it's the permanent
+// medical record number carried across every visit.
+async function updatePatient(req, res) {
+  const { clientId } = req.user;
+  const patient = await Patient.findOne({ where: { id: req.params.id, clientId } });
+  if (!patient) return res.status(404).json({ message: 'Patient not found' });
+
+  const { name, age, ageUnit, gender, mobile, email, address } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ message: 'Patient name is required' });
+  if (mobile && mobile.length > 10) {
+    return res.status(400).json({ message: 'Mobile number cannot be more than 10 digits' });
+  }
+  if (mobile) {
+    const clash = await Patient.findOne({ where: { clientId, mobile, id: { [Op.ne]: patient.id } } });
+    if (clash) return res.status(409).json({ message: `This mobile number already belongs to another patient (${clash.name}, ${clash.umr})` });
+  }
+
+  await patient.update({
+    name: name.trim(),
+    age: age === '' || age == null ? null : Number(age),
+    ageUnit: ageUnit || 'Years',
+    gender: gender || null,
+    mobile: mobile || null,
+    email: email || null,
+    address: address || null,
+  });
+  return res.json(patient);
+}
+
 // GET /api/patients
 async function listPatients(req, res) {
   const { clientId } = req.user;
@@ -71,4 +102,4 @@ async function lookupPatient(req, res) {
   return res.json(patient);
 }
 
-module.exports = { createPatient, listPatients, lookupPatient, findOrCreatePatient };
+module.exports = { createPatient, updatePatient, listPatients, lookupPatient, findOrCreatePatient };
