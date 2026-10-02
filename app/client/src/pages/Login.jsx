@@ -260,6 +260,7 @@ export default function Login() {
             </>
           )}
         </div>
+        <p className="login-powered-by">Powered by Velixa Software Solutions Pvt Ltd</p>
       </div>
     </div>
   );
