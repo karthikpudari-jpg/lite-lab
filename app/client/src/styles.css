@@ -242,7 +242,6 @@ input, select, textarea {
   display: inline-flex; align-items: center; gap: 10px;
   font-weight: 700; font-size: 17px; letter-spacing: 0.02em; margin-bottom: 56px;
 }
-.login-brand-mark .brand-logo { width: 40px; height: 40px; object-fit: contain; flex-shrink: 0; }
 .login-brand h1 {
   font-size: clamp(28px, 3.4vw, 40px);
   line-height: 1.15;
@@ -281,6 +280,7 @@ input, select, textarea {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 20px 40px -12px rgba(15, 23, 42, 0.12);
   border: 1px solid #eef0f4;
 }
+.login-card-logo { display: block; width: 84px; height: 84px; object-fit: contain; margin: 0 auto 20px; }
 .login-card-header { margin-bottom: 24px; }
 .login-card h1 { font-size: 21px; margin: 0 0 4px; color: #0f172a; }
 .login-card p { color: #64748b; font-size: 13px; margin: 0; }

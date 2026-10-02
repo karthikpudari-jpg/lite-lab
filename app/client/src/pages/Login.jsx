@@ -132,7 +132,6 @@ export default function Login() {
       <div className="login-brand">
         <div className="login-brand-top">
           <div className="login-brand-mark">
-            <img src="/velixa-logo.png" alt="Velixa Software Solutions" className="brand-logo" />
             HMS / LIMS
           </div>
           <h1>Run your diagnostics business on one connected platform.</h1>
@@ -151,6 +150,7 @@ export default function Login() {
 
       <div className="login-panel">
         <div className="login-card" style={mode === 'signup' ? { maxWidth: 460 } : undefined}>
+          <img src="/velixa-logo.png" alt="Velixa Software Solutions" className="login-card-logo" />
           {signupResult ? (
             <>
               <div className="login-card-header">
