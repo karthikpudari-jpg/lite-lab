@@ -296,7 +296,7 @@ export default function Laboratory() {
                       <button className="secondary" onClick={() => navigate(`/app/report/${bill.id}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         <Icon name="print" size={14} /> Report
                       </button>
-                      <button className="secondary danger" onClick={() => openRevoke(s)} disabled={busy}>Revoke</button>
+                      <button className="secondary danger" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => openRevoke(s)} disabled={busy}>Revoke</button>
                     </>
                   )}
                 </div>
@@ -369,7 +369,7 @@ export default function Laboratory() {
                     </button>
                   )}
                   {releasedSample && (
-                    <button type="button" className="secondary danger" disabled={busy} onClick={() => openRevoke(releasedSample)}>
+                    <button type="button" className="secondary danger" style={{ padding: '4px 10px', fontSize: 12 }} disabled={busy} onClick={() => openRevoke(releasedSample)}>
                       Revoke
                     </button>
                   )}

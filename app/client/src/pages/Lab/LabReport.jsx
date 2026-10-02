@@ -193,7 +193,7 @@ export default function LabReport() {
               {doctor.signatureUrl && (
                 <img src={doctor.signatureUrl} alt="Signature" style={{ height: 50, display: 'block', margin: '0 auto 4px' }} />
               )}
-              <div style={{ borderTop: '1px solid #334155', paddingTop: 4, minWidth: 160 }}>
+              <div style={{ minWidth: 160 }}>
                 <strong style={{ fontSize: 13 }}>{doctor.name}</strong>
                 {doctor.designation && <div style={{ fontSize: 12, color: '#64748b' }}>{doctor.designation}</div>}
               </div>
