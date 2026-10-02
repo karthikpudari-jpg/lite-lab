@@ -195,6 +195,47 @@ th { background: #f9fafb; }
 }
 .cta-btn:hover { filter: brightness(1.05); }
 .cta-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* Chief Admin Dashboard - colored icon stat cards grouped under a small
+   section label, replacing the plain gray .stat-tile grid on this one page. */
+.dash-header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.dash-header .mark-icon {
+  width: 42px; height: 42px; border-radius: 11px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--brand-teal), var(--brand-teal-light));
+  color: #fff; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 14px rgba(15, 118, 110, 0.3);
+}
+.dash-header h2 { margin: 0; font-size: 20px; }
+.dash-header p { margin: 2px 0 0; font-size: 13px; color: #64748b; }
+.dash-section-label {
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: #94a3b8; margin: 0 0 8px 2px;
+}
+.dash-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.dash-stat-card {
+  background: #fff; border-radius: 14px; padding: 16px; border: 1px solid #f1f5f9;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 22px -16px rgba(15, 23, 42, 0.25);
+  display: flex; align-items: center; gap: 12px; transition: transform .15s ease, box-shadow .15s ease;
+}
+.dash-stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 10px -2px rgba(15, 23, 42, 0.08), 0 14px 26px -12px rgba(15, 23, 42, 0.25); }
+.dash-stat-icon {
+  width: 42px; height: 42px; border-radius: 11px; flex-shrink: 0; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+}
+.dash-stat-icon.blue { background: linear-gradient(135deg, #2563eb, #60a5fa); }
+.dash-stat-icon.green { background: linear-gradient(135deg, #16a34a, #4ade80); }
+.dash-stat-icon.amber { background: linear-gradient(135deg, #d97706, #fbbf24); }
+.dash-stat-icon.red { background: linear-gradient(135deg, #dc2626, #f87171); }
+.dash-stat-icon.teal { background: linear-gradient(135deg, var(--brand-teal), var(--brand-teal-light)); }
+.dash-stat-icon.purple { background: linear-gradient(135deg, #7c3aed, #a78bfa); }
+.dash-stat-icon.indigo { background: linear-gradient(135deg, #4f46e5, #818cf8); }
+.dash-stat-value { font-size: 22px; font-weight: 800; color: #0f172a; line-height: 1.15; }
+.dash-stat-label { font-size: 12px; color: #64748b; font-weight: 600; }
+.dash-client-code {
+  display: inline-block; font-weight: 700; font-size: 12.5px; letter-spacing: .02em;
+  color: var(--brand-teal); background: var(--brand-teal-tint); border-radius: 6px; padding: 2px 8px;
+}
+.dash-table tbody tr:hover { background: #f8fafc; }
 button {
   background: #2563eb; color: #fff; border: none; padding: 8px 14px;
   border-radius: 6px; cursor: pointer; font-size: 14px;
