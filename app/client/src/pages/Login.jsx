@@ -146,6 +146,14 @@ export default function Login() {
           </ul>
         </div>
         <div className="login-brand-footer">Monthly Recharge Application</div>
+        <div className="login-brand-shapes" aria-hidden="true">
+          <span className="shape s1"></span>
+          <span className="shape s2"></span>
+          <span className="shape s3"></span>
+          <span className="shape s4"></span>
+          <span className="shape s5"></span>
+          <span className="shape s6"></span>
+        </div>
       </div>
 
       <div className="login-panel">
