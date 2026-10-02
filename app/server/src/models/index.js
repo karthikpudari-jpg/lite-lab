@@ -200,6 +200,11 @@ const ClientUser = sequelize.define('ClientUser', {
   department: { type: DataTypes.STRING },
   designation: { type: DataTypes.STRING },
   signaturePath: { type: DataTypes.STRING },
+  // The name printed with the signature on a report footer - separate from
+  // this account's own `name` (used everywhere else in the app) so a client
+  // can print any doctor's name here without it having to match a real
+  // login's display name. Falls back to `name`/username when not set.
+  signatureName: { type: DataTypes.STRING },
   active: { type: DataTypes.BOOLEAN, defaultValue: true },
   // Auto-created once per client (see createClient) so Chief Admin can log in
   // as that client - using the client's own code plus this user - to help

@@ -243,7 +243,7 @@ async function getBillReport(req, res) {
     where: { clientId },
     include: [
       { model: BillItem, where: { billId: bill.id }, include: [TestMaster] },
-      { model: Report, include: [{ model: ClientUser, as: 'ReleasedByUser', attributes: ['name', 'designation', 'signaturePath'] }] },
+      { model: Report, include: [{ model: ClientUser, as: 'ReleasedByUser', attributes: ['name', 'username', 'designation', 'signaturePath', 'signatureName'] }] },
       { model: Result, include: [ParameterMaster] },
     ],
   });
@@ -265,7 +265,11 @@ async function getBillReport(req, res) {
   const latestReleased = [...releasedSamples].sort((a, b) => new Date(b.Report.releasedAt) - new Date(a.Report.releasedAt))[0];
   const releasedByUser = latestReleased?.Report?.ReleasedByUser;
   const doctor = releasedByUser?.signaturePath
-    ? { name: releasedByUser.name, designation: releasedByUser.designation, signatureUrl: releasedByUser.signaturePath }
+    ? {
+        name: releasedByUser.signatureName || releasedByUser.name || releasedByUser.username,
+        designation: releasedByUser.designation,
+        signatureUrl: releasedByUser.signaturePath,
+      }
     : null;
 
   return res.json({

@@ -74,18 +74,23 @@ async function uploadBranding(req, res) {
 async function listDoctorUsers(req, res) {
   const users = await ClientUser.findAll({
     where: { clientId: req.user.clientId, isSystemUser: false },
-    attributes: ['id', 'username', 'name', 'designation', 'signaturePath'],
+    attributes: ['id', 'username', 'name', 'designation', 'signaturePath', 'signatureName'],
     order: [['name', 'ASC']],
   });
   return res.json(users);
 }
 
-// PUT /api/branding/doctors/:userId  Body: { designation }
+// PUT /api/branding/doctors/:userId  Body: { designation, signatureName }
+// signatureName is whatever name should print with the signature - any name
+// at all, not necessarily this login's own account name.
 async function setDoctorDesignation(req, res) {
   const user = await ClientUser.findOne({ where: { id: req.params.userId, clientId: req.user.clientId } });
   if (!user) return res.status(404).json({ message: 'User not found' });
-  await user.update({ designation: req.body.designation?.trim() || null });
-  return res.json({ id: user.id, designation: user.designation });
+  await user.update({
+    designation: req.body.designation?.trim() || null,
+    signatureName: req.body.signatureName?.trim() || null,
+  });
+  return res.json({ id: user.id, designation: user.designation, signatureName: user.signatureName });
 }
 
 // POST /api/branding/doctors/:userId/signature  (multipart: signature)

@@ -11,7 +11,7 @@ export default function ReportBranding() {
   const [saving, setSaving] = useState(false);
 
   const [doctors, setDoctors] = useState([]);
-  const [designationDrafts, setDesignationDrafts] = useState({}); // userId -> in-progress text before Save
+  const [doctorDrafts, setDoctorDrafts] = useState({}); // userId -> { signatureName, designation } in-progress before Save
   const [savingDoctorId, setSavingDoctorId] = useState(null);
   const [doctorError, setDoctorError] = useState('');
 
@@ -25,19 +25,26 @@ export default function ReportBranding() {
   async function loadDoctors() {
     const { data } = await api.get('/branding/doctors');
     setDoctors(data);
-    setDesignationDrafts(Object.fromEntries(data.map((u) => [u.id, u.designation || ''])));
+    setDoctorDrafts(Object.fromEntries(data.map((u) => [
+      u.id, { signatureName: u.signatureName || '', designation: u.designation || '' },
+    ])));
   }
   useEffect(() => { load(); loadDoctors(); }, []);
 
-  async function handleSaveDesignation(userId) {
+  function updateDoctorDraft(userId, field, value) {
+    setDoctorDrafts((d) => ({ ...d, [userId]: { ...d[userId], [field]: value } }));
+  }
+
+  async function handleSaveDoctorInfo(userId) {
     if (savingDoctorId) return; // guard against rapid double-submit
     setDoctorError('');
     setSavingDoctorId(userId);
     try {
-      await api.put(`/branding/doctors/${userId}`, { designation: designationDrafts[userId] });
+      const draft = doctorDrafts[userId];
+      await api.put(`/branding/doctors/${userId}`, { designation: draft.designation, signatureName: draft.signatureName });
       await loadDoctors();
     } catch (err) {
-      setDoctorError(err.response?.data?.message || 'Failed to save designation');
+      setDoctorError(err.response?.data?.message || 'Failed to save doctor details');
     } finally {
       setSavingDoctorId(null);
     }
@@ -141,53 +148,66 @@ export default function ReportBranding() {
     <div className="card">
       <h3>Doctor Signature</h3>
       <p style={{ fontSize: 13, color: '#64748b' }}>
-        Set a signature and designation against whichever of your users should appear as the signing doctor.
-        Whenever that user releases a lab report, their signature and designation print on the report footer -
+        Set a doctor name, designation and signature against whichever of your users should appear as the signing
+        doctor. The name is whatever you type here - it doesn't need to match that user's login/account name.
+        Whenever that user releases a lab report, this name, designation and signature print on the report footer -
         a user with nothing set here just won't show a signature on reports they release.
       </p>
 
       {doctorError && <p className="error-text">{doctorError}</p>}
 
       <table>
-        <thead><tr><th>User</th><th>Designation</th><th>Signature</th><th></th></tr></thead>
+        <thead><tr><th>Login</th><th>Doctor Name (printed on report)</th><th>Designation</th><th>Signature</th><th></th></tr></thead>
         <tbody>
-          {doctors.map((u) => (
-            <tr key={u.id}>
-              <td>{u.name || u.username}</td>
-              <td>
-                <input
-                  value={designationDrafts[u.id] ?? ''}
-                  onChange={(e) => setDesignationDrafts((d) => ({ ...d, [u.id]: e.target.value }))}
-                  placeholder="e.g. MD, Pathologist"
-                  style={{ minWidth: 160 }}
-                />
-              </td>
-              <td>
-                {u.signaturePath
-                  ? <img src={u.signaturePath} alt="Signature" style={{ height: 32 }} />
-                  : <span style={{ color: '#94a3b8', fontSize: 12 }}>Not set</span>}
-              </td>
-              <td style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <button
-                  type="button"
-                  disabled={savingDoctorId === u.id || (designationDrafts[u.id] ?? '') === (u.designation || '')}
-                  onClick={() => handleSaveDesignation(u.id)}
-                >
-                  Save
-                </button>
-                <label className="secondary" style={{ padding: '8px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>
-                  {u.signaturePath ? 'Replace' : 'Upload'}
+          {doctors.map((u) => {
+            const draft = doctorDrafts[u.id] || { signatureName: '', designation: '' };
+            const unchanged = draft.signatureName === (u.signatureName || '') && draft.designation === (u.designation || '');
+            return (
+              <tr key={u.id}>
+                <td>{u.name || u.username}</td>
+                <td>
                   <input
-                    type="file"
-                    accept="image/*"
-                    style={{ display: 'none' }}
-                    onChange={(e) => handleUploadSignature(u.id, e.target.files[0])}
+                    value={draft.signatureName}
+                    onChange={(e) => updateDoctorDraft(u.id, 'signatureName', e.target.value)}
+                    placeholder="e.g. Dr. Ramesh Kumar"
+                    style={{ minWidth: 170 }}
                   />
-                </label>
-              </td>
-            </tr>
-          ))}
-          {doctors.length === 0 && <tr><td colSpan={4}>No users found for this client yet.</td></tr>}
+                </td>
+                <td>
+                  <input
+                    value={draft.designation}
+                    onChange={(e) => updateDoctorDraft(u.id, 'designation', e.target.value)}
+                    placeholder="e.g. MD, Pathologist"
+                    style={{ minWidth: 160 }}
+                  />
+                </td>
+                <td>
+                  {u.signaturePath
+                    ? <img src={u.signaturePath} alt="Signature" style={{ height: 32 }} />
+                    : <span style={{ color: '#94a3b8', fontSize: 12 }}>Not set</span>}
+                </td>
+                <td style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    disabled={savingDoctorId === u.id || unchanged}
+                    onClick={() => handleSaveDoctorInfo(u.id)}
+                  >
+                    Save
+                  </button>
+                  <label className="secondary" style={{ padding: '8px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>
+                    {u.signaturePath ? 'Replace' : 'Upload'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={(e) => handleUploadSignature(u.id, e.target.files[0])}
+                    />
+                  </label>
+                </td>
+              </tr>
+            );
+          })}
+          {doctors.length === 0 && <tr><td colSpan={5}>No users found for this client yet.</td></tr>}
         </tbody>
       </table>
     </div>
