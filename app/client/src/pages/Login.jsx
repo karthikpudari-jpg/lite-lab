@@ -3,14 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
 
-function IconFlask() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 3h6M10 3v6.5L4.5 19a1.5 1.5 0 0 0 1.3 2.2h12.4a1.5 1.5 0 0 0 1.3-2.2L14 9.5V3" />
-      <path d="M7.5 15h9" />
-    </svg>
-  );
-}
 function IconUser() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -140,7 +132,7 @@ export default function Login() {
       <div className="login-brand">
         <div className="login-brand-top">
           <div className="login-brand-mark">
-            <span className="mark-icon"><IconFlask /></span>
+            <img src="/velixa-logo.png" alt="Velixa Software Solutions" className="brand-logo" />
             HMS / LIMS
           </div>
           <h1>Run your diagnostics business on one connected platform.</h1>

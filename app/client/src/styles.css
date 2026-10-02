@@ -242,12 +242,7 @@ input, select, textarea {
   display: inline-flex; align-items: center; gap: 10px;
   font-weight: 700; font-size: 17px; letter-spacing: 0.02em; margin-bottom: 56px;
 }
-.login-brand-mark .mark-icon {
-  width: 34px; height: 34px; border-radius: 9px;
-  background: linear-gradient(135deg, #2563eb, #38bdf8);
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.45);
-}
+.login-brand-mark .brand-logo { width: 40px; height: 40px; object-fit: contain; flex-shrink: 0; }
 .login-brand h1 {
   font-size: clamp(28px, 3.4vw, 40px);
   line-height: 1.15;
