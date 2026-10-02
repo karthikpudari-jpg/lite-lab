@@ -213,7 +213,7 @@ export default function Orders() {
         <thead>
           <tr>
             <th>Order ID</th><th>UMR</th><th>Patient</th><th>Ref. Doctor</th><th>Walk-in</th>
-            <th>Net Payable</th><th>Due</th><th>Tests</th><th>Actions</th>
+            <th>Net Paid Amount</th><th>Due</th><th>Tests</th><th>Actions</th>
           </tr>
         </thead>
         <tbody>
