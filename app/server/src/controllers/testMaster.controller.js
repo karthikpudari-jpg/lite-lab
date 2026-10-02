@@ -385,7 +385,15 @@ async function previewUpload(req, res) {
   const existingTests = await TestMaster.findAll({
     include: [{ model: ParameterMaster, where: { clientId: null }, required: false }],
   });
-  const testByCode = new Map(existingTests.map((t) => [t.testCode, t]));
+  // Seeded from the database, then updated as rows are walked below - so a
+  // brand-new test's first row (which introduces it) doesn't make every one
+  // of its *other* rows in this same upload (its other parameters, or extra
+  // age/gender range rows for the same parameter) look like they're each
+  // creating ANOTHER new test/parameter too. Mirrors what commitUpload's
+  // real findOrCreate calls do against the live database, row by row.
+  const seenParamsByTestCode = new Map(existingTests.map((t) => [
+    t.testCode, new Set(t.ParameterMasters.map((p) => p.parameterName.toLowerCase())),
+  ]));
 
   const preview = rows.map((r, idx) => {
     const testCode = String(r.TEST_CODE || '').trim();
@@ -413,10 +421,9 @@ async function previewUpload(req, res) {
     if (gender && !GENDER_OPTIONS.includes(gender)) errors.push(`GENDER must be one of ${GENDER_OPTIONS.join(', ')}`);
     if (ageUnit && !AGE_UNIT_OPTIONS.includes(ageUnit)) errors.push(`AGE_UNIT must be one of ${AGE_UNIT_OPTIONS.join(', ')}`);
 
-    const existingTest = testByCode.get(testCode);
-    const isNewTest = !existingTest;
+    const isNewTest = testCode && !seenParamsByTestCode.has(testCode);
     const paramAlreadyExists = !isNewTest && parameterName
-      && existingTest.ParameterMasters.some((p) => p.parameterName.toLowerCase() === parameterName.toLowerCase());
+      && seenParamsByTestCode.get(testCode).has(parameterName.toLowerCase());
 
     let action;
     if (hasRangeRule) {
@@ -425,6 +432,13 @@ async function previewUpload(req, res) {
       action = paramAlreadyExists ? 'Parameter already exists — skipped' : (isNewTest ? 'New test + parameter' : 'Add parameter');
     } else {
       action = isNewTest ? 'New test (no parameter)' : 'Test already exists';
+    }
+
+    // This row's test/parameter now "exist" for every later row in this same
+    // upload, exactly like commitUpload's findOrCreate would see them.
+    if (testCode) {
+      if (!seenParamsByTestCode.has(testCode)) seenParamsByTestCode.set(testCode, new Set());
+      if (parameterName) seenParamsByTestCode.get(testCode).add(parameterName.toLowerCase());
     }
 
     return {
