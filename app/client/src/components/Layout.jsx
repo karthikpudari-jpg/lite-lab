@@ -143,6 +143,10 @@ export function ChiefAdminLayout() {
             <NavLink to="/chief-admin/reset-password"><Icon name="lock" size={17} /><span>My Password</span></NavLink>
           </div>
         </nav>
+        <div className="sidebar-footer-brand">
+          <img src="/velixa-icon.png" alt="Velixa Software Solutions" />
+          <span>Velixa Software<br />Solutions Pvt Ltd</span>
+        </div>
       </aside>
       <main className="main-content">
         <div className="topbar">
@@ -195,6 +199,10 @@ export function AppLayout() {
             <NavLink to="/app/reset-password"><Icon name="lock" size={17} /><span>Reset Password</span></NavLink>
           </div>
         </nav>
+        <div className="sidebar-footer-brand">
+          <img src="/velixa-icon.png" alt="Velixa Software Solutions" />
+          <span>Velixa Software<br />Solutions Pvt Ltd</span>
+        </div>
       </aside>
       <main className="main-content">
         <div className="topbar">
