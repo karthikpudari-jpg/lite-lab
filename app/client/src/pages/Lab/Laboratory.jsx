@@ -4,6 +4,15 @@ import api from '../../api/client';
 import { Icon } from '../../components/Icons';
 import ReviewResults from './ReviewResults';
 
+function daysAgoISO(days) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 const RESULT_ENTRY_STATUSES = ['COLLECTED', 'RESULT_ENTERED', 'VERIFIED'];
 
 const STATUS_META = {
@@ -93,8 +102,8 @@ export default function Laboratory() {
   const [samples, setSamples] = useState([]);
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
+  const [fromDate, setFromDate] = useState(() => daysAgoISO(3));
+  const [toDate, setToDate] = useState(() => todayISO());
   const [viewMode, setViewMode] = useState('cards'); // cards | list
   const [reviewGroup, setReviewGroup] = useState(null); // bill group open in the full-screen Review Results panel
   const [reviewFocusId, setReviewFocusId] = useState(null); // which test within it starts focused
