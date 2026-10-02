@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../../api/client';
 import { downloadFile } from '../../utils/download';
+import { Icon } from '../../components/Icons';
 
 /** A minimal inline bar chart - no charting library needed for a handful of bars. */
 function BarChart({ data, valueKey, labelKey }) {
@@ -44,6 +45,7 @@ export default function Reports() {
   const [reportStatus, setReportStatus] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [groupBy, setGroupBy] = useState('day');
+  const [labDetails, setLabDetails] = useState([]);
 
   const dateParams = { from: fromDate || undefined, to: toDate || undefined };
 
@@ -53,6 +55,7 @@ export default function Reports() {
     api.get('/reports/lab-summary', { params: dateParams }).then((r) => setLabSummary(r.data));
     api.get('/reports/test-wise-revenue', { params: dateParams }).then((r) => setTestRevenue(r.data));
     api.get('/reports/report-status', { params: dateParams }).then((r) => setReportStatus(r.data));
+    api.get('/reports/lab-details', { params: dateParams }).then((r) => setLabDetails(r.data));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromDate, toDate]);
 
@@ -75,24 +78,22 @@ export default function Reports() {
 
   return (
     <div>
-      <div className="card no-print">
-        <div className="topbar" style={{ marginBottom: 0 }}>
-          <h3 style={{ margin: 0 }}>Filter by Date</h3>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
-            <label style={{ marginBottom: 0 }}><span>From Date</span>
-              <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-            </label>
-            <label style={{ marginBottom: 0 }}><span>To Date</span>
-              <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-            </label>
-            {(fromDate || toDate) && (
-              <button type="button" className="secondary" onClick={() => { setFromDate(''); setToDate(''); }}>Clear</button>
-            )}
-            <button type="button" className="secondary" onClick={() => downloadFile(exportUrl(), 'reports-export.xlsx')}>
-              Export to Excel
-            </button>
-            <button type="button" onClick={() => window.print()}>Print / Save as PDF</button>
+      <div className="card date-filter-bar no-print">
+        <div className="df-title"><Icon name="calendar" size={15} /> Filter by Date</div>
+        <div className="df-controls">
+          <div className="df-field"><span>From</span>
+            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
           </div>
+          <div className="df-field"><span>To</span>
+            <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          </div>
+          {(fromDate || toDate) && (
+            <button type="button" className="secondary" onClick={() => { setFromDate(''); setToDate(''); }}>Clear</button>
+          )}
+          <button type="button" className="secondary" onClick={() => downloadFile(exportUrl(), 'reports-export.xlsx')}>
+            Export to Excel
+          </button>
+          <button type="button" onClick={() => window.print()}>Print / Save as PDF</button>
         </div>
       </div>
 
@@ -164,6 +165,23 @@ export default function Reports() {
               </tr>
             ))}
             {outstanding.length === 0 && <tr><td colSpan={7}>No outstanding bills.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card">
+        <h3>Lab Details (Samples)</h3>
+        <table>
+          <thead><tr><th>Barcode</th><th>Test Code</th><th>Test Name</th><th>Sample Status</th><th>Report Status</th><th>Collected At</th></tr></thead>
+          <tbody>
+            {labDetails.map((d) => (
+              <tr key={d.barcode}>
+                <td>{d.barcode}</td><td>{d.testCode}</td><td>{d.testName}</td>
+                <td>{d.status}</td><td>{d.reportStatus || '—'}</td>
+                <td>{d.collectedAt ? new Date(d.collectedAt).toLocaleString() : '—'}</td>
+              </tr>
+            ))}
+            {labDetails.length === 0 && <tr><td colSpan={6}>No samples.</td></tr>}
           </tbody>
         </table>
       </div>

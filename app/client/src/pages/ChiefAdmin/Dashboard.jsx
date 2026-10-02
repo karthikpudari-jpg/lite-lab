@@ -55,22 +55,20 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="card no-print">
-        <div className="topbar" style={{ marginBottom: 0 }}>
-          <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="calendar" size={16} /> Filter by Date</h3>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
-            <label style={{ marginBottom: 0 }}><span>From Date</span>
-              <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-            </label>
-            <label style={{ marginBottom: 0 }}><span>To Date</span>
-              <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-            </label>
-            {dateFiltered && (
-              <button type="button" className="secondary" onClick={() => { setFromDate(''); setToDate(''); }}>Clear</button>
-            )}
+      <div className="card date-filter-bar no-print">
+        <div className="df-title"><Icon name="calendar" size={15} /> Filter by Date</div>
+        <div className="df-controls">
+          <div className="df-field"><span>From</span>
+            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
           </div>
+          <div className="df-field"><span>To</span>
+            <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          </div>
+          {dateFiltered && (
+            <button type="button" className="secondary" onClick={() => { setFromDate(''); setToDate(''); }}>Clear</button>
+          )}
         </div>
-        <p style={{ fontSize: 12, color: '#64748b', margin: '8px 0 0' }}>
+        <p className="df-note">
           Scopes Lab Bills/Lab Revenue/Payments Collected below to this date range. Client status counts and
           this-cycle SaaS revenue always reflect right now, regardless of the range.
         </p>
