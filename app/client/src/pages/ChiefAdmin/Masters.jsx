@@ -131,15 +131,13 @@ export default function Masters() {
     });
   }, [tests, search, categoryFilter]);
 
-  // Every parameter already defined on any other test, flattened for the "copy
-  // from existing" search in the Add Parameter modal - so a parameter like
-  // "Hemoglobin" doesn't need to be retyped from scratch for every test it
-  // belongs to. Excludes the currently selected test since those already exist there.
+  // Every parameter already defined on any test (including the one currently
+  // selected), flattened for the "copy from existing" search in the Add
+  // Parameter modal - so a parameter like "Hemoglobin" doesn't need to be
+  // retyped from scratch for every test it belongs to.
   const existingParamLibrary = useMemo(() => {
-    return tests.flatMap((t) =>
-      t.id === selectedTestId ? [] : (t.ParameterMasters || []).map((p) => ({ ...p, testName: t.testName }))
-    );
-  }, [tests, selectedTestId]);
+    return tests.flatMap((t) => (t.ParameterMasters || []).map((p) => ({ ...p, testName: t.testName })));
+  }, [tests]);
 
   const paramCopyMatches = useMemo(() => {
     const q = paramCopySearch.trim().toLowerCase();
