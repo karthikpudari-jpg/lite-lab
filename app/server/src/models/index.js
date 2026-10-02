@@ -618,6 +618,13 @@ TestMaster.belongsToMany(Package, { through: 'package_test', foreignKey: 'testId
 TestMaster.hasMany(ParameterMaster, { foreignKey: 'testId', onDelete: 'CASCADE' });
 ParameterMaster.belongsTo(TestMaster, { foreignKey: 'testId' });
 
+// A parameter can also be *assigned* to other tests beyond the one it was
+// created on (its "home" test above) - same code, unit, method and normal
+// ranges shared everywhere it's assigned, so updating a range updates it for
+// every test that uses it instead of each test keeping its own duplicate row.
+TestMaster.belongsToMany(ParameterMaster, { through: 'test_parameter_link', as: 'AssignedParameters', foreignKey: 'testId', otherKey: 'parameterId' });
+ParameterMaster.belongsToMany(TestMaster, { through: 'test_parameter_link', as: 'AssignedTests', foreignKey: 'parameterId', otherKey: 'testId' });
+
 Client.hasMany(Patient, { foreignKey: 'clientId', onDelete: 'CASCADE' });
 Patient.belongsTo(Client, { foreignKey: 'clientId' });
 

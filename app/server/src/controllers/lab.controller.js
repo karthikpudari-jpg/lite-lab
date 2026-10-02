@@ -9,13 +9,23 @@ const { sendEmail, sendWhatsApp } = require('../utils/notify');
 
 // A client doing result entry sees every universal parameter plus whatever
 // parameters it added for itself for that test - never another client's own.
+// Also includes parameters *assigned* to the test from elsewhere (see
+// TestMaster.AssignedParameters in models/index.js) - merged into
+// ParameterMasters by withResolvedRanges below, so result entry shows them
+// exactly like the test's own parameters.
 function buildSampleIncludes(clientId) {
   const paramWhere = { [Op.or]: [{ clientId: null }, { clientId }] };
   return [
     {
       model: BillItem,
       include: [
-        { model: TestMaster, include: [{ model: ParameterMaster, where: paramWhere, required: false }] },
+        {
+          model: TestMaster,
+          include: [
+            { model: ParameterMaster, where: paramWhere, required: false },
+            { model: ParameterMaster, as: 'AssignedParameters', where: paramWhere, required: false, through: { attributes: [] } },
+          ],
+        },
         { model: Bill, include: [Patient] },
       ],
     },
@@ -57,6 +67,15 @@ async function withResolvedRanges(sampleJson) {
   const age = patient?.age;
   const gender = patient?.gender;
   const ageUnit = patient?.ageUnit;
+
+  const testMaster = sampleJson.BillItem?.TestMaster;
+  if (testMaster) {
+    const owned = testMaster.ParameterMasters || [];
+    const ownedIds = new Set(owned.map((p) => p.id));
+    const assigned = (testMaster.AssignedParameters || []).filter((p) => !ownedIds.has(p.id));
+    testMaster.ParameterMasters = [...owned, ...assigned];
+    delete testMaster.AssignedParameters;
+  }
 
   const params = sampleJson.BillItem?.TestMaster?.ParameterMasters;
   if (Array.isArray(params) && params.length > 0) {

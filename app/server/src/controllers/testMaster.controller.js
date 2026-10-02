@@ -92,15 +92,33 @@ async function createTest(req, res) {
 // A client sees every universal parameter plus whatever parameters they've
 // added for themselves; Chief Admin (no client context) sees only the
 // universal catalog - matching what it managed before this feature existed.
+// Each test's ParameterMasters list is its own (home) parameters plus any
+// parameter *assigned* to it from elsewhere - merged into one array so
+// nothing else in the app needs to know about the distinction.
 async function listTests(req, res) {
   const clientId = requesterClientId(req);
   const paramWhere = clientId ? { [Op.or]: [{ clientId: null }, { clientId }] } : { clientId: null };
 
   const tests = await TestMaster.findAll({
-    include: [{ model: ParameterMaster, where: paramWhere, required: false, include: [ParameterNormalRange] }],
+    include: [
+      { model: ParameterMaster, where: paramWhere, required: false, include: [ParameterNormalRange] },
+      { model: ParameterMaster, as: 'AssignedParameters', where: paramWhere, required: false, include: [ParameterNormalRange], through: { attributes: [] } },
+    ],
     order: [['testCode', 'ASC']],
   });
-  return res.json(tests);
+
+  const result = tests.map((t) => {
+    const json = t.toJSON();
+    const owned = json.ParameterMasters || [];
+    const ownedIds = new Set(owned.map((p) => p.id));
+    const assigned = (json.AssignedParameters || [])
+      .filter((p) => !ownedIds.has(p.id))
+      .map((p) => ({ ...p, isAssigned: true }));
+    json.ParameterMasters = [...owned, ...assigned];
+    delete json.AssignedParameters;
+    return json;
+  });
+  return res.json(result);
 }
 
 // PUT /api/masters/tests/:id
@@ -175,6 +193,37 @@ async function addParameter(req, res) {
 
   const full = await ParameterMaster.findByPk(parameter.id, { include: [ParameterNormalRange] });
   return res.status(201).json(full);
+}
+
+// POST /api/masters/tests/:testId/parameters/:parameterId/assign
+// Attaches an *existing* parameter to this test instead of creating a
+// duplicate row - the same code, unit, method and normal ranges are shared,
+// so editing them later (e.g. updating a range) updates every test that uses
+// it. Idempotent: assigning the same parameter twice, or a parameter that's
+// already this test's own, is a harmless no-op.
+async function assignParameter(req, res) {
+  const test = await TestMaster.findByPk(req.params.testId);
+  if (!test) return res.status(404).json({ message: 'Test not found' });
+
+  const parameter = await ParameterMaster.findByPk(req.params.parameterId, { include: [ParameterNormalRange] });
+  if (!parameter) return res.status(404).json({ message: 'Parameter not found' });
+
+  // A client may only assign a universal parameter or one of its own - never
+  // another client's private parameter.
+  const clientId = requesterClientId(req);
+  if (clientId && parameter.clientId && parameter.clientId !== clientId) {
+    return res.status(403).json({ message: 'You cannot assign another client\'s parameter' });
+  }
+
+  if (parameter.testId !== test.id) {
+    // Checked explicitly (not just relying on the frontend's rapid-click
+    // guard) so a double-click or retried request can't create a second
+    // test_parameter_link row for the same pair - there's no unique
+    // constraint on the auto-generated join table to catch that for us.
+    const alreadyLinked = await test.hasAssignedParameter(parameter);
+    if (!alreadyLinked) await test.addAssignedParameter(parameter);
+  }
+  return res.status(200).json(parameter);
 }
 
 // POST /api/masters/parameters/:parameterId/ranges  - add one age/gender-specific
@@ -457,6 +506,6 @@ async function commitUpload(req, res) {
 }
 
 module.exports = {
-  createTest, listTests, updateTest, addParameter, addNormalRange, deleteNormalRange,
+  createTest, listTests, updateTest, addParameter, assignParameter, addNormalRange, deleteNormalRange,
   downloadTemplate, previewUpload, commitUpload, listTestGroups, createTestGroup,
 };

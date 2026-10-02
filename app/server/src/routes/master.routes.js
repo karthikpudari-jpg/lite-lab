@@ -18,6 +18,7 @@ router.get('/tests', testCtrl.listTests);
 router.post('/tests', testCtrl.createTest);
 router.put('/tests/:id', testCtrl.updateTest);
 router.post('/tests/:testId/parameters', testCtrl.addParameter);
+router.post('/tests/:testId/parameters/:parameterId/assign', testCtrl.assignParameter);
 router.post('/parameters/:parameterId/ranges', testCtrl.addNormalRange);
 router.delete('/parameters/:parameterId/ranges/:rangeId', testCtrl.deleteNormalRange);
 

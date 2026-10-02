@@ -131,42 +131,44 @@ export default function Masters() {
     });
   }, [tests, search, categoryFilter]);
 
-  // Every parameter already defined on any test (including the one currently
-  // selected), flattened for the "copy from existing" search in the Add
+  // Every parameter already defined on any test, deduplicated by id and
+  // flattened for the "assign an existing parameter" search in the Add
   // Parameter modal - so a parameter like "Hemoglobin" doesn't need to be
-  // retyped from scratch for every test it belongs to.
+  // recreated for every test it belongs to. Assigning shares the same row
+  // (code, unit, method, ranges) rather than duplicating it, so updating a
+  // range later updates it everywhere it's assigned.
   const existingParamLibrary = useMemo(() => {
-    return tests.flatMap((t) => (t.ParameterMasters || []).map((p) => ({ ...p, testName: t.testName })));
+    const seen = new Map();
+    for (const t of tests) {
+      for (const p of t.ParameterMasters || []) {
+        if (!seen.has(p.id)) seen.set(p.id, { ...p, testName: t.testName });
+      }
+    }
+    return [...seen.values()];
   }, [tests]);
 
   const paramCopyMatches = useMemo(() => {
     const q = paramCopySearch.trim().toLowerCase();
     if (!q) return [];
-    return existingParamLibrary.filter((p) => p.parameterName.toLowerCase().includes(q)).slice(0, 8);
-  }, [existingParamLibrary, paramCopySearch]);
+    const alreadyOnTest = new Set((selectedTest?.ParameterMasters || []).map((p) => p.id));
+    return existingParamLibrary
+      .filter((p) => !alreadyOnTest.has(p.id) && p.parameterName.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [existingParamLibrary, paramCopySearch, selectedTest]);
 
-  function applyParamCopy(p) {
-    setParamForm({
-      parameterName: p.parameterName,
-      unit: p.unit || '',
-      method: p.method || '',
-      isInterpretation: !!p.isInterpretation,
-    });
-    if (p.isInterpretation) {
-      setRangeRows([]);
-    } else if (p.ParameterNormalRanges && p.ParameterNormalRanges.length > 0) {
-      setRangeRows(p.ParameterNormalRanges.map((r) => ({
-        gender: r.gender || 'Any',
-        ageMin: r.ageMin ?? '',
-        ageMax: r.ageMax ?? '',
-        ageUnit: r.ageUnit || 'Years',
-        normalRangeLow: r.normalRangeLow || '',
-        normalRangeHigh: r.normalRangeHigh || '',
-      })));
-    } else {
-      setRangeRows([{ ...emptyRangeRow(), normalRangeLow: p.normalRangeLow || '', normalRangeHigh: p.normalRangeHigh || '' }]);
+  async function assignExistingParam(p) {
+    if (savingParam) return;
+    setError('');
+    setSavingParam(true);
+    try {
+      await api.post(`/admin/masters/tests/${selectedTestId}/parameters/${p.id}/assign`);
+      setShowParamModal(false);
+      load();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to assign parameter');
+    } finally {
+      setSavingParam(false);
     }
-    setParamCopySearch('');
   }
 
   function openNewTest() {
@@ -382,6 +384,11 @@ export default function Masters() {
                       <td>{p.parameterCode || '—'}</td>
                       <td>
                         {p.parameterName}
+                        {p.isAssigned && (
+                          <span className="range-pill neutral" style={{ marginLeft: 6 }} title="Shared with another test - editing its range here updates it everywhere it's assigned">
+                            Shared
+                          </span>
+                        )}
                         {p.method && <div style={{ fontSize: 11, color: '#94a3b8' }}>{p.method}</div>}
                       </td>
                       <td>{p.unit || '—'}</td>
@@ -477,13 +484,18 @@ export default function Masters() {
             <p style={{ fontSize: 13, color: '#64748b' }}>The parameter code is generated automatically - no need to type one.</p>
 
             <div style={{ marginBottom: 14, position: 'relative' }}>
-              <label><span>Copy from an existing parameter (optional)</span>
+              <label><span>Assign an existing parameter (optional)</span>
                 <input
                   value={paramCopySearch}
                   onChange={(e) => setParamCopySearch(e.target.value)}
                   placeholder="Search a parameter already used on another test, e.g. Hemoglobin"
                 />
               </label>
+              <p style={{ fontSize: 12, color: '#94a3b8', margin: '-8px 0 0' }}>
+                Selecting a match attaches it to this test immediately - same code, unit and ranges shared
+                everywhere it's used, so updating its range here updates it for every test that uses it too.
+                No need to fill the form below.
+              </p>
               {paramCopyMatches.length > 0 && (
                 <div style={{
                   position: 'absolute', zIndex: 5, top: '100%', left: 0, right: 0,
@@ -493,8 +505,9 @@ export default function Masters() {
                   {paramCopyMatches.map((p) => (
                     <button
                       type="button"
-                      key={`${p.id}-${p.testId}`}
-                      onClick={() => applyParamCopy(p)}
+                      key={p.id}
+                      onClick={() => assignExistingParam(p)}
+                      disabled={savingParam}
                       style={{
                         display: 'block', width: '100%', textAlign: 'left', background: 'transparent',
                         color: '#1a1a1a', border: 'none', borderBottom: '1px solid #f1f5f9',
@@ -509,6 +522,7 @@ export default function Masters() {
               )}
             </div>
 
+            <p style={{ fontSize: 13, fontWeight: 600, margin: '18px 0 2px' }}>Or create a brand-new parameter</p>
             <form onSubmit={handleAddParameter}>
               <div className="form-grid" style={{ alignItems: 'end' }}>
                 <label><span>Parameter Name</span>
