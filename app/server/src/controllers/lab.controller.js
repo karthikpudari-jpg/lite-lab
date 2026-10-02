@@ -1,7 +1,7 @@
 const { Op } = require('sequelize');
 const {
   Sample, BillItem, TestMaster, ParameterMaster, ParameterNormalRange, Result, Report, Bill, Patient, Client,
-  ReferralDoctor, Payor,
+  ReferralDoctor, Payor, ClientUser,
 } = require('../models');
 const { buildParameterInsight } = require('../utils/trendInsights');
 const { resolveNormalRange } = require('../utils/normalRange');
@@ -206,7 +206,7 @@ async function releaseSample(req, res) {
   }
 
   await sample.update({ status: 'RELEASED' });
-  await sample.Report.update({ status: 'RELEASED', releasedAt: new Date() });
+  await sample.Report.update({ status: 'RELEASED', releasedAt: new Date(), releasedByUserId: req.user.id });
   return res.json({ message: 'Report released' });
 }
 
@@ -243,7 +243,7 @@ async function getBillReport(req, res) {
     where: { clientId },
     include: [
       { model: BillItem, where: { billId: bill.id }, include: [TestMaster] },
-      Report,
+      { model: Report, include: [{ model: ClientUser, as: 'ReleasedByUser', attributes: ['name', 'designation', 'signaturePath'] }] },
       { model: Result, include: [ParameterMaster] },
     ],
   });
@@ -257,7 +257,19 @@ async function getBillReport(req, res) {
   const ageUnit = bill.Patient?.ageUnit;
   await attachNormalRanges(releasedSamples.flatMap((s) => s.Results.map((r) => r.ParameterMaster)));
 
+  // One signature printed per report, even though a bill can have several
+  // released tests - whoever released the most recent one represents it.
+  // Only a user who has actually set up a signature (via Report Branding)
+  // shows one; otherwise the report footer prints with no signature, same as
+  // before this feature existed.
+  const latestReleased = [...releasedSamples].sort((a, b) => new Date(b.Report.releasedAt) - new Date(a.Report.releasedAt))[0];
+  const releasedByUser = latestReleased?.Report?.ReleasedByUser;
+  const doctor = releasedByUser?.signaturePath
+    ? { name: releasedByUser.name, designation: releasedByUser.designation, signatureUrl: releasedByUser.signaturePath }
+    : null;
+
   return res.json({
+    doctor,
     bill: {
       id: bill.id, billNo: bill.billNo, createdAt: bill.createdAt,
       referredDoctor: bill.ReferralDoctor?.name || null,

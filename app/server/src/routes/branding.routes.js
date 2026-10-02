@@ -13,4 +13,8 @@ router.use(authenticate, requireActiveSubscription, requireRole(ROLES.MANAGER));
 router.get('/', ctrl.getBranding);
 router.post('/', upload.fields([{ name: 'logo', maxCount: 1 }, { name: 'letterhead', maxCount: 1 }]), ctrl.uploadBranding);
 
+router.get('/doctors', ctrl.listDoctorUsers);
+router.put('/doctors/:userId', ctrl.setDoctorDesignation);
+router.post('/doctors/:userId/signature', upload.single('signature'), ctrl.uploadDoctorSignature);
+
 module.exports = router;

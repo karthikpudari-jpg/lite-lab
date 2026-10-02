@@ -545,6 +545,10 @@ const Report = sequelize.define('Report', {
   },
   verifiedAt: { type: DataTypes.DATE },
   releasedAt: { type: DataTypes.DATE },
+  // The ClientUser who clicked "Release" - used to print *that* user's own
+  // doctor signature/designation (set up in Report Branding) on this
+  // report's footer, rather than whoever happens to be viewing/printing it.
+  releasedByUserId: { type: DataTypes.INTEGER },
   // Set when a released report is later revoked (e.g. a mistake was found) -
   // kept as a record rather than cleared, same "stamp, don't delete" idea as
   // BillDiscount.cancelledAt. The underlying Sample rolls back to VERIFIED so
@@ -701,6 +705,8 @@ ParameterNormalRange.belongsTo(ParameterMaster, { foreignKey: 'parameterId' });
 
 Sample.hasOne(Report, { foreignKey: 'sampleId', onDelete: 'CASCADE' });
 Report.belongsTo(Sample, { foreignKey: 'sampleId' });
+
+Report.belongsTo(ClientUser, { foreignKey: 'releasedByUserId', as: 'ReleasedByUser' });
 
 Client.hasMany(Ticket, { foreignKey: 'clientId', onDelete: 'CASCADE' });
 Ticket.belongsTo(Client, { foreignKey: 'clientId' });

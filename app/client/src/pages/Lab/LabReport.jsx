@@ -61,7 +61,7 @@ export default function LabReport() {
   if (error) return <div className="card"><p className="error-text">{error}</p></div>;
   if (!report) return <p>Loading…</p>;
 
-  const { patient, client, tests } = report;
+  const { patient, client, tests, doctor } = report;
   const collectedAt = tests.map((t) => t.collectedAt).filter(Boolean).sort()[0];
   const releasedAt = tests.map((t) => t.releasedAt).filter(Boolean).sort().slice(-1)[0];
 
@@ -184,6 +184,20 @@ export default function LabReport() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {doctor && (
+          <div style={{ marginTop: 40, display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ textAlign: 'center' }}>
+              {doctor.signatureUrl && (
+                <img src={doctor.signatureUrl} alt="Signature" style={{ height: 50, display: 'block', margin: '0 auto 4px' }} />
+              )}
+              <div style={{ borderTop: '1px solid #334155', paddingTop: 4, minWidth: 160 }}>
+                <strong style={{ fontSize: 13 }}>{doctor.name}</strong>
+                {doctor.designation && <div style={{ fontSize: 12, color: '#64748b' }}>{doctor.designation}</div>}
+              </div>
+            </div>
           </div>
         )}
 

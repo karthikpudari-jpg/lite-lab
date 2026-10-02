@@ -80,6 +80,7 @@ async function start() {
   await sequelize.query('ALTER TABLE client ADD COLUMN IF NOT EXISTS "brandingAddress" VARCHAR(255)');
   await sequelize.query('ALTER TABLE client ADD COLUMN IF NOT EXISTS "brandingMobile" VARCHAR(255)');
   await sequelize.query('ALTER TABLE client ADD COLUMN IF NOT EXISTS "brandingEmail" VARCHAR(255)');
+  await sequelize.query('ALTER TABLE report ADD COLUMN IF NOT EXISTS "releasedByUserId" INTEGER');
   await backfillSystemUsers();
   await expireOverdueSubscriptions();
   setInterval(() => {
