@@ -133,14 +133,19 @@ export default function Laboratory() {
 
   // Newest-first, filtered by status tab, the search box, and the walk-in
   // date range - shared by both the flat List view and the grouped Cards
-  // view below.
+  // view below. The date range only narrows down RELEASED (and CANCELLED)
+  // samples - anything still outstanding (not yet collected/entered/
+  // verified/released) always shows regardless of date, so a sample that's
+  // been sitting pending for longer than the default window never silently
+  // drops off the queue.
   const visibleSamples = useMemo(() => {
     const q = search.trim();
     const bucket = TAB_STATUSES[statusFilter];
     const list = samples.filter((s) => {
+      const isOutstanding = !['RELEASED', 'CANCELLED'].includes(s.status);
       const walkInDate = s.BillItem?.Bill?.walkInDate;
-      const matchesFrom = !fromDate || !walkInDate || walkInDate >= fromDate;
-      const matchesTo = !toDate || !walkInDate || walkInDate <= toDate;
+      const matchesFrom = isOutstanding || !fromDate || !walkInDate || walkInDate >= fromDate;
+      const matchesTo = isOutstanding || !toDate || !walkInDate || walkInDate <= toDate;
       return (!bucket || bucket.includes(s.status)) && matchesSearch(s, q) && matchesFrom && matchesTo;
     });
     return [...list].sort((a, b) => b.id - a.id);
