@@ -4,6 +4,7 @@ const path = require('path');
 const express = require('express');
 require('express-async-errors'); // makes thrown/rejected errors in async route handlers reach the error middleware instead of crashing the process
 const cors = require('cors');
+const helmet = require('helmet');
 const { sequelize } = require('./models');
 const routes = require('./routes');
 const { expireOverdueSubscriptions } = require('./controllers/subscription.controller');
@@ -13,6 +14,16 @@ const app = express();
 const UPLOAD_ROOT = path.join(__dirname, '..', 'uploads');
 fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
 
+app.use(helmet({
+  // Disabled: the default CSP would block the Razorpay checkout script and
+  // other external resources this app loads; a tuned CSP can be added later
+  // if needed.
+  contentSecurityPolicy: false,
+  // Disabled: the client (Netlify) and this API are served from different
+  // origins, and the client needs to load /uploads images (logos,
+  // letterheads, signatures) cross-origin - the default policy would block that.
+  crossOriginResourcePolicy: false,
+}));
 app.use(cors({ origin: process.env.CLIENT_URL || '*' }));
 app.use(express.json({
   verify: (req, _res, buf) => { req.rawBody = buf.toString(); },
@@ -56,6 +67,19 @@ async function start() {
   await sequelize.query("ALTER TABLE bill_discount ADD COLUMN IF NOT EXISTS \"cancelledAt\" TIMESTAMPTZ");
   await sequelize.query("ALTER TABLE client_user ADD COLUMN IF NOT EXISTS \"isSystemUser\" BOOLEAN NOT NULL DEFAULT false");
   await sequelize.query("ALTER TABLE client ADD COLUMN IF NOT EXISTS \"qrPaymentRequired\" BOOLEAN NOT NULL DEFAULT true");
+  await sequelize.query('ALTER TABLE parameter_master ADD COLUMN IF NOT EXISTS description TEXT');
+  await sequelize.query("ALTER TYPE enum_report_status ADD VALUE IF NOT EXISTS 'REVOKED'");
+  await sequelize.query('ALTER TABLE report ADD COLUMN IF NOT EXISTS "revokedAt" TIMESTAMPTZ');
+  await sequelize.query('ALTER TABLE report ADD COLUMN IF NOT EXISTS "revokedReason" VARCHAR(255)');
+  await sequelize.query('ALTER TABLE bill ADD COLUMN IF NOT EXISTS "gstPercent" DECIMAL(5,2) NOT NULL DEFAULT 0');
+  await sequelize.query('ALTER TABLE bill ADD COLUMN IF NOT EXISTS "cgstAmount" DECIMAL(10,2) NOT NULL DEFAULT 0');
+  await sequelize.query('ALTER TABLE bill ADD COLUMN IF NOT EXISTS "sgstAmount" DECIMAL(10,2) NOT NULL DEFAULT 0');
+  await sequelize.query('ALTER TABLE bill ADD COLUMN IF NOT EXISTS "taxAmount" DECIMAL(10,2) NOT NULL DEFAULT 0');
+  await sequelize.query('ALTER TABLE client ADD COLUMN IF NOT EXISTS "defaultGstPercent" DECIMAL(5,2) NOT NULL DEFAULT 0');
+  await sequelize.query('ALTER TABLE client ADD COLUMN IF NOT EXISTS "brandingName" VARCHAR(255)');
+  await sequelize.query('ALTER TABLE client ADD COLUMN IF NOT EXISTS "brandingAddress" VARCHAR(255)');
+  await sequelize.query('ALTER TABLE client ADD COLUMN IF NOT EXISTS "brandingMobile" VARCHAR(255)');
+  await sequelize.query('ALTER TABLE client ADD COLUMN IF NOT EXISTS "brandingEmail" VARCHAR(255)');
   await backfillSystemUsers();
   await expireOverdueSubscriptions();
   setInterval(() => {
