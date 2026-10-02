@@ -188,7 +188,7 @@ export default function LabReport() {
         )}
 
         {doctor && (
-          <div style={{ marginTop: 40, display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ marginTop: 40, display: 'flex', justifyContent: 'flex-end', breakInside: 'avoid', pageBreakInside: 'avoid' }}>
             <div style={{ textAlign: 'center' }}>
               {doctor.signatureUrl && (
                 <img src={doctor.signatureUrl} alt="Signature" style={{ height: 50, display: 'block', margin: '0 auto 4px' }} />
