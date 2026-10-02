@@ -80,6 +80,11 @@ export default function ReviewResults({ group, focusSampleId, onClose, onSaved }
 
   const checkedSamples = eligibleSamples.filter((s) => checked.has(s.id));
   const allCheckedReady = checkedSamples.length > 0 && checkedSamples.every((s) => enteredCount(s).filled === enteredCount(s).total);
+  // Editing results that were already VERIFIED (opened via "Edit Results" on
+  // a report pending/awaiting release) is a correction, not first-time entry -
+  // saving re-verifies and re-releases it in one step instead of requiring a
+  // separate trip through Verify and then the main screen's Release action.
+  const allCheckedWereVerified = checkedSamples.length > 0 && checkedSamples.every((s) => s.status === 'VERIFIED');
 
   async function handleSubmit() {
     if (busy || checkedSamples.length === 0) return;
@@ -92,9 +97,16 @@ export default function ReviewResults({ group, focusSampleId, onClose, onSaved }
         await api.post(`/lab/samples/${s.id}/results`, { results });
       }
       if (allCheckedReady) {
-        for (const s of checkedSamples) {
-          if (s.status === 'RESULT_ENTERED' || s.status === 'COLLECTED') {
-            await api.post(`/lab/samples/${s.id}/verify`).catch(() => {});
+        if (allCheckedWereVerified) {
+          for (const s of checkedSamples) {
+            await api.post(`/lab/samples/${s.id}/verify`);
+            await api.post(`/lab/samples/${s.id}/release`);
+          }
+        } else {
+          for (const s of checkedSamples) {
+            if (s.status === 'RESULT_ENTERED' || s.status === 'COLLECTED') {
+              await api.post(`/lab/samples/${s.id}/verify`).catch(() => {});
+            }
           }
         }
       }
@@ -227,9 +239,13 @@ export default function ReviewResults({ group, focusSampleId, onClose, onSaved }
       <div className="review-footer">
         <span className="checked-count">{checkedSamples.length} of {eligibleSamples.length} test(s) checked</span>
         <button onClick={handleSubmit} disabled={busy || checkedSamples.length === 0}>
-          {busy ? 'Saving…' : allCheckedReady
-            ? `Mark Reviewed ${checkedSamples.length} Test${checkedSamples.length === 1 ? '' : 's'}`
-            : `Save Results (${checkedSamples.length})`}
+          {busy
+            ? (allCheckedWereVerified && allCheckedReady ? 'Releasing…' : 'Saving…')
+            : allCheckedReady
+              ? (allCheckedWereVerified
+                ? `Release ${checkedSamples.length} Test${checkedSamples.length === 1 ? '' : 's'}`
+                : `Mark Reviewed ${checkedSamples.length} Test${checkedSamples.length === 1 ? '' : 's'}`)
+              : `Save Results (${checkedSamples.length})`}
         </button>
       </div>
     </div>
