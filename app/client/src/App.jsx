@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { installInspectGuard } from './utils/disableInspect';
 import { ChiefAdminLayout, AppLayout } from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
@@ -31,6 +33,8 @@ import PayorInvoiceView from './pages/Manager/PayorInvoiceView';
 import TestParameters from './pages/Manager/TestParameters';
 
 export default function App() {
+  useEffect(() => installInspectGuard(), []);
+
   return (
     <Routes>
       <Route path="/" element={<Login />} />
