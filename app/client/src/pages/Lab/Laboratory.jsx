@@ -63,15 +63,17 @@ function formatAge(age, ageUnit) {
 // The post-billing flow, top to bottom: a sample is collected, its results are
 // entered and verified, then its report is released. Each tab is a bucket of
 // one or more Sample statuses - "Result Entry" covers both COLLECTED (not yet
-// entered) and RESULT_ENTERED (entered, not yet verified), and "Report
-// Release" covers both VERIFIED (ready to release) and RELEASED (already
-// released), since both pairs are one and the same stage from a work-queue
-// point of view. "All" shows every status, including CANCELLED.
+// entered) and RESULT_ENTERED (entered, not yet verified). "Report Release"
+// is VERIFIED only (ready to release, action still needed) and "Completed" is
+// RELEASED only (already released) - kept as separate steps so a finished
+// report doesn't sit mixed in with ones still awaiting release. "All" shows
+// every status, including CANCELLED.
 const STATUS_TABS = [
   { key: '', label: 'All', statuses: null },
   { key: 'SAMPLE_COLLECTION', label: 'Sample Collection', statuses: ['PENDING_COLLECTION'] },
   { key: 'RESULT_ENTRY', label: 'Result Entry', statuses: ['COLLECTED', 'RESULT_ENTERED'] },
-  { key: 'REPORT_RELEASE', label: 'Report Release', statuses: ['VERIFIED', 'RELEASED'] },
+  { key: 'REPORT_RELEASE', label: 'Report Release', statuses: ['VERIFIED'] },
+  { key: 'COMPLETED', label: 'Completed', statuses: ['RELEASED'] },
 ];
 const TAB_STATUSES = Object.fromEntries(STATUS_TABS.filter((t) => t.statuses).map((t) => [t.key, t.statuses]));
 
