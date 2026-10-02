@@ -196,9 +196,6 @@ export default function Login() {
     <div className="login-page">
       <div className="login-brand">
         <div className="login-brand-top">
-          <div className="login-brand-mark">
-            LIMS
-          </div>
           <LoginIllustration />
           <ul className="login-brand-features">
             {FEATURES.map((f) => (
@@ -231,6 +228,7 @@ export default function Login() {
           ) : (
             <>
               <div className="login-card-header">
+                {mode !== 'signup' && <span className="login-card-brand">LIMS</span>}
                 <h1>{mode === 'signup' ? 'Create your account' : 'Welcome back'}</h1>
                 <p>{mode === 'signup' ? 'Register your lab and start your first month free of setup hassle.' : 'Sign in to continue to your dashboard.'}</p>
               </div>

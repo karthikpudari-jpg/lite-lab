@@ -238,10 +238,6 @@ input, select, textarea {
   pointer-events: none;
 }
 .login-brand-top { position: relative; z-index: 1; }
-.login-brand-mark {
-  display: inline-flex; align-items: center; gap: 10px;
-  font-weight: 700; font-size: 17px; letter-spacing: 0.02em; margin-bottom: 56px;
-}
 .login-brand h1 {
   font-size: clamp(28px, 3.4vw, 40px);
   line-height: 1.15;
@@ -287,6 +283,10 @@ input, select, textarea {
 }
 .login-card-logo { display: block; width: 84px; height: 84px; object-fit: contain; margin: 0 auto 20px; }
 .login-card-header { margin-bottom: 24px; }
+.login-card-brand {
+  display: block; font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--brand-teal); margin-bottom: 6px;
+}
 .login-card h1 { font-size: 21px; margin: 0 0 4px; color: #0f172a; }
 .login-card p { color: #64748b; font-size: 13px; margin: 0; }
 .login-card label { display: block; margin-bottom: 14px; font-size: 13px; }
