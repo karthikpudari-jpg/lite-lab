@@ -132,7 +132,7 @@ export default function Login() {
       <div className="login-brand">
         <div className="login-brand-top">
           <div className="login-brand-mark">
-            HMS / LIMS
+            LIMS
           </div>
           <h1>Run your diagnostics business on one connected platform.</h1>
           <p className="tagline">
