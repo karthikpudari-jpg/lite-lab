@@ -51,6 +51,7 @@ export default function TestParameters() {
   const [paramForm, setParamForm] = useState(blankParamForm());
   const [rangeRows, setRangeRows] = useState([]); // extra age/gender-specific rules for the parameter being created
   const [savingParam, setSavingParam] = useState(false);
+  const [paramCopySearch, setParamCopySearch] = useState(''); // "copy from an existing parameter" search box in the Add Parameter modal
 
   const [shortNameForm, setShortNameForm] = useState({ testId: '', shortName: '' });
 
@@ -90,10 +91,52 @@ export default function TestParameters() {
     });
   }, [tests, search, categoryFilter]);
 
+  // Every parameter already defined on any other test, flattened for the "copy
+  // from existing" search in the Add Parameter modal - so a parameter like
+  // "Hemoglobin" doesn't need to be retyped from scratch for every test it
+  // belongs to. Excludes the currently selected test since those already exist there.
+  const existingParamLibrary = useMemo(() => {
+    return tests.flatMap((t) =>
+      t.id === selectedTestId ? [] : (t.ParameterMasters || []).map((p) => ({ ...p, testName: t.testName }))
+    );
+  }, [tests, selectedTestId]);
+
+  const paramCopyMatches = useMemo(() => {
+    const q = paramCopySearch.trim().toLowerCase();
+    if (!q) return [];
+    return existingParamLibrary.filter((p) => p.parameterName.toLowerCase().includes(q)).slice(0, 8);
+  }, [existingParamLibrary, paramCopySearch]);
+
+  function applyParamCopy(p) {
+    setParamForm({
+      parameterName: p.parameterName,
+      unit: p.unit || '',
+      method: p.method || '',
+      isInterpretation: !!p.isInterpretation,
+      normalRangeLow: p.normalRangeLow || '',
+      normalRangeHigh: p.normalRangeHigh || '',
+      description: p.description || '',
+    });
+    if (p.isInterpretation) {
+      setRangeRows([]);
+    } else {
+      setRangeRows((p.ParameterNormalRanges || []).map((r) => ({
+        gender: r.gender || 'Any',
+        ageMin: r.ageMin ?? '',
+        ageMax: r.ageMax ?? '',
+        ageUnit: r.ageUnit || 'Years',
+        normalRangeLow: r.normalRangeLow || '',
+        normalRangeHigh: r.normalRangeHigh || '',
+      })));
+    }
+    setParamCopySearch('');
+  }
+
   function openAddParameter() {
     setError('');
     setParamForm(blankParamForm());
     setRangeRows([]);
+    setParamCopySearch('');
     setShowParamModal(true);
   }
 
@@ -277,6 +320,40 @@ export default function TestParameters() {
           <div className="modal-card" style={{ textAlign: 'left', width: 620, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
             <h2>Add Parameter — {selectedTest.testName}</h2>
             <p style={{ fontSize: 13, color: '#64748b' }}>The parameter code is generated automatically - no need to type one.</p>
+
+            <div style={{ marginBottom: 14, position: 'relative' }}>
+              <label><span>Copy from an existing parameter (optional)</span>
+                <input
+                  value={paramCopySearch}
+                  onChange={(e) => setParamCopySearch(e.target.value)}
+                  placeholder="Search a parameter already used on another test, e.g. Hemoglobin"
+                />
+              </label>
+              {paramCopyMatches.length > 0 && (
+                <div style={{
+                  position: 'absolute', zIndex: 5, top: '100%', left: 0, right: 0,
+                  background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8,
+                  boxShadow: '0 8px 20px -6px rgba(15,23,42,0.15)', maxHeight: 220, overflowY: 'auto',
+                }}>
+                  {paramCopyMatches.map((p) => (
+                    <button
+                      type="button"
+                      key={`${p.id}-${p.testId}`}
+                      onClick={() => applyParamCopy(p)}
+                      style={{
+                        display: 'block', width: '100%', textAlign: 'left', background: 'transparent',
+                        color: '#1a1a1a', border: 'none', borderBottom: '1px solid #f1f5f9',
+                        padding: '8px 12px', fontSize: 13, borderRadius: 0,
+                      }}
+                    >
+                      <strong>{p.parameterName}</strong>
+                      <span style={{ color: '#64748b' }}> — {p.unit || 'no unit'} · from {p.testName}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <form onSubmit={handleAddParameter}>
               <div className="form-grid" style={{ alignItems: 'end' }}>
                 <label><span>Parameter Name</span>
