@@ -20,7 +20,7 @@ const STATUS_META = {
   COLLECTED: { label: 'Collected', dot: '#2563eb' },
   RESULT_ENTERED: { label: 'Result Entered', dot: '#7c3aed' },
   VERIFIED: { label: 'Verified', dot: '#0891b2' },
-  RELEASED: { label: 'Completed', dot: '#16a34a' },
+  RELEASED: { label: 'Released', dot: '#16a34a' },
   CANCELLED: { label: 'Cancelled', dot: '#dc2626' },
 };
 
