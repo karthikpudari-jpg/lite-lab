@@ -14,6 +14,13 @@ function paramsFor(sample) {
   return sample.BillItem?.TestMaster?.ParameterMasters || [];
 }
 
+// Interpretation parameters are free-text commentary, not a measured result -
+// leaving one blank shouldn't block a test from counting as complete and
+// auto-verifying on save.
+function requiredParamsFor(sample) {
+  return paramsFor(sample).filter((p) => !p.isInterpretation);
+}
+
 function initialValuesFor(sample) {
   const values = {};
   for (const r of sample.Results || []) values[r.parameterId] = r.value;
@@ -51,7 +58,7 @@ export default function ReviewResults({ group, focusSampleId, onClose, onSaved }
   const [checked, setChecked] = useState(() => {
     const set = new Set();
     for (const s of eligibleSamples) {
-      const complete = paramsFor(s).every((p) => (initialValuesFor(s)[p.id] || '').toString().trim() !== '');
+      const complete = requiredParamsFor(s).every((p) => (initialValuesFor(s)[p.id] || '').toString().trim() !== '');
       if (complete) set.add(s.id);
     }
     // Whichever test "Results"/"Verify" was clicked on should already be
@@ -64,7 +71,7 @@ export default function ReviewResults({ group, focusSampleId, onClose, onSaved }
   const [error, setError] = useState('');
 
   function enteredCount(sample) {
-    const params = paramsFor(sample);
+    const params = requiredParamsFor(sample);
     const vals = values[sample.id] || {};
     const filled = params.filter((p) => (vals[p.id] || '').toString().trim() !== '').length;
     return { filled, total: params.length };
