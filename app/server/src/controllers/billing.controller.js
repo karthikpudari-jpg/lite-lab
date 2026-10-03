@@ -6,6 +6,7 @@ const {
 } = require('../models');
 const { findOrCreatePatient } = require('./patient.controller');
 const { findOrCreateDoctor } = require('./referralDoctor.controller');
+const { sendEmail, sendWhatsApp } = require('../utils/notify');
 
 function generateBarcode() {
   return `S${Date.now()}${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
@@ -34,7 +35,7 @@ async function createBill(req, res) {
   const {
     patientId, umr, name, age, ageUnit, gender, mobile, email, address,
     testIds, referredDoctorName, walkInDate, discount, paymentMode, visitAddress, transactionNumber, remarks, payorId,
-    visitType, priority, amountCollected,
+    visitType, priority, amountCollected, gstPercent, barcodes,
   } = req.body;
 
   if (!Array.isArray(testIds) || testIds.length === 0) {
@@ -81,7 +82,13 @@ async function createBill(req, res) {
   const doctor = referredDoctorName ? await findOrCreateDoctor(clientId, referredDoctorName) : null;
   const discountAmount = Number(discount) || 0;
   const totalAmount = prices.reduce((sum, p) => sum + chargedPriceFor(p), 0);
-  const netPayable = Math.max(0, totalAmount - discountAmount);
+  const taxableAmount = Math.max(0, totalAmount - discountAmount);
+  const gstPercentNum = Number(gstPercent) || 0;
+  const round2 = (n) => Math.round(n * 100) / 100;
+  const taxAmount = round2(taxableAmount * gstPercentNum / 100);
+  const cgstAmount = round2(taxAmount / 2);
+  const sgstAmount = round2(taxAmount - cgstAmount);
+  const netPayable = taxableAmount + taxAmount;
 
   // A credit (Payor) bill is settled later via a Payor invoice - paidAmount
   // there has always meant "amount to invoice the payor", not cash collected
@@ -103,6 +110,17 @@ async function createBill(req, res) {
     if (paidAmountNum > 0 && !paymentMode) {
       return res.status(400).json({ message: 'Payment Mode is required' });
     }
+  }
+
+  // A barcode entered at billing time (e.g. scanning a pre-printed tube
+  // label) is optional - testIds without one still get an auto-generated
+  // barcode and start PENDING_COLLECTION as before. Sample.barcode is
+  // globally unique, so check for collisions up front with a clear message
+  // instead of letting the transaction fail on a raw DB constraint error.
+  const manualBarcodes = Object.entries(barcodes || {}).filter(([, v]) => v?.toString().trim());
+  for (const [, code] of manualBarcodes) {
+    const existing = await Sample.findOne({ where: { barcode: code.toString().trim() } });
+    if (existing) return res.status(400).json({ message: `Barcode "${code}" is already in use by another sample` });
   }
 
   // Guard against duplicate bills from a rapid double-click / double-submit:
@@ -134,6 +152,10 @@ async function createBill(req, res) {
         priority: priority || 'ROUTINE',
         totalAmount,
         discount: discountAmount,
+        gstPercent: gstPercentNum,
+        cgstAmount,
+        sgstAmount,
+        taxAmount,
         paidAmount: paidAmountNum,
         dueAmount: dueAmountNum,
         paymentMode: payor ? null : (paidAmountNum > 0 ? paymentMode : null),
@@ -147,8 +169,16 @@ async function createBill(req, res) {
           billId: bill.id, testId: p.testId, price: chargedPriceFor(p), originalPrice: Number(p.price),
         }, { transaction: t });
 
+        const manualBarcode = barcodes?.[p.testId]?.toString().trim();
         const sample = await Sample.create({
-          clientId, billItemId: billItem.id, barcode: generateBarcode(), status: 'PENDING_COLLECTION',
+          clientId, billItemId: billItem.id,
+          barcode: manualBarcode || generateBarcode(),
+          // A barcode entered at billing time means the sample was already
+          // physically labelled/collected right then - skip straight to
+          // COLLECTED so it's ready for result entry instead of sitting in
+          // the Pending Collection queue waiting for a separate Collect step.
+          status: manualBarcode ? 'COLLECTED' : 'PENDING_COLLECTION',
+          collectedAt: manualBarcode ? new Date() : null,
         }, { transaction: t });
 
         await Report.create({ sampleId: sample.id, status: 'PENDING' }, { transaction: t });
@@ -212,11 +242,23 @@ async function addBillItem(req, res) {
     }, { transaction: t });
     await Report.create({ sampleId: sample.id, status: 'PENDING' }, { transaction: t });
 
+    // This new test's own share of GST, at the bill's existing rate - keeps
+    // the tax breakdown consistent with what was charged on every other test
+    // already on this bill, rather than leaving it untaxed.
+    const gstPercentNum = Number(bill.gstPercent) || 0;
+    const round2 = (n) => Math.round(n * 100) / 100;
+    const itemTax = round2(price * gstPercentNum / 100);
+    const itemCgst = round2(itemTax / 2);
+    const itemSgst = round2(itemTax - itemCgst);
+
     bill.totalAmount = Number(bill.totalAmount) + price;
+    bill.cgstAmount = Number(bill.cgstAmount) + itemCgst;
+    bill.sgstAmount = Number(bill.sgstAmount) + itemSgst;
+    bill.taxAmount = Number(bill.taxAmount) + itemTax;
     if (bill.payorId) {
-      bill.paidAmount = Number(bill.paidAmount) + price;
+      bill.paidAmount = Number(bill.paidAmount) + price + itemTax;
     } else {
-      bill.dueAmount = Number(bill.dueAmount) + price;
+      bill.dueAmount = Number(bill.dueAmount) + price + itemTax;
     }
     await bill.save({ transaction: t });
 
@@ -346,9 +388,9 @@ async function cancelBillItem(req, res) {
 // PUT /api/billing/bills/:billId/discount
 // Body: { amount, mode, reason } -- applies an extra discount to a bill after
 // it's already been created, separate from any discount given at billing
-// time. No test is cancelled; it just reduces what's still payable, and
-// (since bills are collected in full up front) that amount is handed back,
-// so it's tracked with a payment mode exactly like a Refund.
+// time. No test is cancelled; it reduces what's still payable, coming off
+// dueAmount first (so an unpaid patient simply owes less) and only touching
+// paidAmount - handed back like a Refund - once dueAmount is exhausted.
 async function applyPostBillingDiscount(req, res) {
   const { clientId } = req.user;
   const { billId } = req.params;
@@ -382,15 +424,25 @@ async function applyPostBillingDiscount(req, res) {
     }
   }
 
-  if (discountAmount > Number(bill.paidAmount)) {
-    return res.status(400).json({ message: `Discount cannot exceed ₹${Number(bill.paidAmount).toFixed(2)} remaining on this bill` });
+  const paidAmount = Number(bill.paidAmount);
+  const dueAmount = Number(bill.dueAmount);
+  if (discountAmount > paidAmount + dueAmount) {
+    return res.status(400).json({ message: `Discount cannot exceed ₹${(paidAmount + dueAmount).toFixed(2)} remaining on this bill` });
   }
 
+  // A discount comes off whatever the patient still owes first - only the
+  // leftover (once dueAmount hits zero) is handed back out of money already
+  // collected. A bill with ₹300 due and a ₹300 discount should just clear
+  // the due, not need money refunded.
+  const fromDue = Math.min(discountAmount, dueAmount);
+  const fromPaid = discountAmount - fromDue;
+
   const result = await sequelize.transaction(async (t) => {
-    const billDiscount = await BillDiscount.create({ billId: bill.id, amount: discountAmount, mode, reason }, { transaction: t });
+    const billDiscount = await BillDiscount.create({ billId: bill.id, amount: discountAmount, fromDueAmount: fromDue, mode, reason }, { transaction: t });
 
     bill.discount = Number(bill.discount) + discountAmount;
-    bill.paidAmount = Math.max(0, Number(bill.paidAmount) - discountAmount);
+    bill.dueAmount = Math.max(0, dueAmount - fromDue);
+    bill.paidAmount = Math.max(0, paidAmount - fromPaid);
     await bill.save({ transaction: t });
 
     return billDiscount;
@@ -422,8 +474,14 @@ async function cancelPostBillingDiscount(req, res) {
     billDiscount.cancelledAt = new Date();
     await billDiscount.save({ transaction: t });
 
+    const fromDue = Number(billDiscount.fromDueAmount);
+    const fromPaid = Number(billDiscount.amount) - fromDue;
     bill.discount = Math.max(0, Number(bill.discount) - Number(billDiscount.amount));
-    bill.dueAmount = Number(bill.dueAmount) + Number(billDiscount.amount);
+    // Restore each side exactly as it was taken - the due portion becomes
+    // due again, and the paid portion becomes paid again (not also due),
+    // since cancelling the discount doesn't mean cash was taken back.
+    bill.dueAmount = Number(bill.dueAmount) + fromDue;
+    bill.paidAmount = Number(bill.paidAmount) + fromPaid;
     await bill.save({ transaction: t });
 
     return billDiscount;
@@ -513,13 +571,14 @@ async function getBillingSettings(req, res) {
     refundAllowedDays: client.refundAllowedDays,
     allowPostBillingDiscount: client.allowPostBillingDiscount,
     postDiscountAllowedDays: client.postDiscountAllowedDays,
+    defaultGstPercent: client.defaultGstPercent,
   });
 }
 
 // PUT /api/billing-settings  (Admin/Manager self-service - no Chief Admin needed)
 async function updateBillingSettings(req, res) {
   const client = await Client.findByPk(req.user.clientId);
-  const { allowBillCancellationRefund, refundAllowedDays, allowPostBillingDiscount, postDiscountAllowedDays } = req.body;
+  const { allowBillCancellationRefund, refundAllowedDays, allowPostBillingDiscount, postDiscountAllowedDays, defaultGstPercent } = req.body;
 
   const updates = {};
   if (allowBillCancellationRefund !== undefined) {
@@ -548,6 +607,13 @@ async function updateBillingSettings(req, res) {
     }
     updates.postDiscountAllowedDays = days;
   }
+  if (defaultGstPercent !== undefined) {
+    const pct = Number(defaultGstPercent);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+      return res.status(400).json({ message: 'defaultGstPercent must be a number between 0 and 100' });
+    }
+    updates.defaultGstPercent = pct;
+  }
 
   await client.update(updates);
   return res.json({
@@ -555,11 +621,56 @@ async function updateBillingSettings(req, res) {
     refundAllowedDays: client.refundAllowedDays,
     allowPostBillingDiscount: client.allowPostBillingDiscount,
     postDiscountAllowedDays: client.postDiscountAllowedDays,
+    defaultGstPercent: client.defaultGstPercent,
   });
+}
+
+// POST /api/billing/bills/:billId/share  Body: { channel: 'whatsapp' | 'email', to? }
+// `to` defaults to the patient's own mobile/email on file - only needed when
+// sending somewhere else (e.g. a relative picking up the report). Sends a
+// text/HTML summary, not a copy of the printed receipt - sendWhatsApp/
+// sendEmail don't support attachments today (see utils/notify.js).
+async function shareBill(req, res) {
+  const { clientId } = req.user;
+  const { channel, to } = req.body;
+  if (channel !== 'whatsapp' && channel !== 'email') {
+    return res.status(400).json({ message: 'channel must be "whatsapp" or "email"' });
+  }
+
+  const bill = await Bill.findOne({
+    where: { id: req.params.billId, clientId },
+    include: [Patient, Client, { model: BillItem, include: [TestMaster] }],
+  });
+  if (!bill) return res.status(404).json({ message: 'Bill not found' });
+
+  const testLines = bill.BillItems.filter((i) => i.status !== 'CANCELLED')
+    .map((i) => `- ${i.TestMaster.testName}: ₹${i.price}`).join('\n');
+  const summary = `Bill No: ${bill.billNo}\nDate: ${bill.walkInDate}\n${testLines}\n\nTotal: ₹${bill.totalAmount}`
+    + (Number(bill.taxAmount) > 0 ? `\nGST: ₹${bill.taxAmount}` : '')
+    + `\nPaid: ₹${bill.paidAmount}` + (Number(bill.dueAmount) > 0 ? `\nDue: ₹${bill.dueAmount}` : '');
+
+  if (channel === 'whatsapp') {
+    const mobile = to || bill.Patient?.mobile;
+    if (!mobile) return res.status(400).json({ message: "No mobile number on file for this patient - provide 'to'" });
+    const result = await sendWhatsApp({
+      to: mobile,
+      message: `Hi ${bill.Patient?.name || ''}, here is your bill from ${bill.Client.clientName}.\n\n${summary}\n\nThank you!`,
+    });
+    return res.json(result);
+  }
+
+  const email = to || bill.Patient?.email;
+  if (!email) return res.status(400).json({ message: "No email on file for this patient - provide 'to'" });
+  const result = await sendEmail({
+    to: email,
+    subject: `Your bill from ${bill.Client.clientName} - ${bill.billNo}`,
+    html: `<p>Hi ${bill.Patient?.name || ''},</p><p>Here is your bill from ${bill.Client.clientName}.</p><pre>${summary}</pre><p>Thank you!</p>`,
+  });
+  return res.json(result);
 }
 
 module.exports = {
   createBill, getBill, listBills, listTestPrices, listPayors, listPayorTestPrices, cancelBillItem,
   applyPostBillingDiscount, cancelPostBillingDiscount, addBillItem, recordDuePayment,
-  getBillingSettings, updateBillingSettings,
+  getBillingSettings, updateBillingSettings, shareBill,
 };

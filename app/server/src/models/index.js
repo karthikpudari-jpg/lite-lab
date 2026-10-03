@@ -497,6 +497,11 @@ const Refund = sequelize.define('Refund', {
 const BillDiscount = sequelize.define('BillDiscount', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   amount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+  // How much of `amount` was taken off the bill's still-outstanding
+  // dueAmount, vs handed back out of money already collected (paidAmount) -
+  // recorded so cancelling this discount later can restore each side
+  // exactly, instead of guessing from the bill's current totals.
+  fromDueAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
   mode: { type: DataTypes.STRING, allowNull: false },
   reason: { type: DataTypes.STRING, allowNull: false },
   // Set when this discount is later reversed - kept as a record (never

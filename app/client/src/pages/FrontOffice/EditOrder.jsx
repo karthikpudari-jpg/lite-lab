@@ -267,9 +267,12 @@ export default function EditOrder() {
         </div>
       )}
 
-      {settings?.allowPostBillingDiscount && Number(bill.paidAmount) > 0 && (
+      {settings?.allowPostBillingDiscount && (Number(bill.paidAmount) > 0 || Number(bill.dueAmount) > 0) && (
         <div className="card">
           <h3>Give a Discount</h3>
+          <p style={{ fontSize: 12, color: '#64748b', marginTop: -6 }}>
+            Comes off any amount still due first; only reduces already-collected payment once due reaches ₹0.
+          </p>
           {bill.BillDiscounts?.length > 0 && (
             <table style={{ marginBottom: 14 }}>
               <thead><tr><th>Amount</th><th>Mode</th><th>Reason</th><th>Status</th><th></th></tr></thead>
@@ -291,9 +294,9 @@ export default function EditOrder() {
             </table>
           )}
           <form onSubmit={handleApplyDiscount} className="form-grid" style={{ alignItems: 'end' }}>
-            <label><span>Discount Amount (max ₹{Number(bill.paidAmount).toFixed(2)})</span>
+            <label><span>Discount Amount (max ₹{(Number(bill.paidAmount) + Number(bill.dueAmount)).toFixed(2)})</span>
               <input
-                type="number" min="0.01" step="0.01" max={Number(bill.paidAmount)}
+                type="number" min="0.01" step="0.01" max={Number(bill.paidAmount) + Number(bill.dueAmount)}
                 value={discountForm.amount}
                 onChange={(e) => setDiscountForm((f) => ({ ...f, amount: e.target.value }))}
                 required
