@@ -20,6 +20,13 @@ function initialValuesFor(sample) {
   return values;
 }
 
+function formatAge(age, ageUnit) {
+  if (age == null || age === '') return '';
+  if (ageUnit === 'Months') return `${age}mo`;
+  if (ageUnit === 'Days') return `${age}d`;
+  return `${age}y`;
+}
+
 /**
  * Full-screen result entry + review/verify panel for one bill's tests -
  * the same screen opens whichever of "Results" or "Verify" was clicked on a
@@ -131,7 +138,19 @@ export default function ReviewResults({ group, focusSampleId, onClose, onSaved }
         <span className="dot">•</span>
         <span className="meta">#{`LAB${String(group.billId).padStart(5, '0')}`}</span>
         <span className="dot">•</span>
+        <span className="meta">{group.billNo}</span>
+        <span className="dot">•</span>
         <span className="meta">{group.patient?.name}</span>
+        {(group.patient?.age || group.patient?.gender) && (
+          <>
+            <span className="dot">•</span>
+            <span className="meta">
+              {formatAge(group.patient?.age, group.patient?.ageUnit)}
+              {group.patient?.age && group.patient?.gender ? ' / ' : ''}
+              {group.patient?.gender}
+            </span>
+          </>
+        )}
         <button className="close-btn" onClick={onClose} aria-label="Close">×</button>
       </div>
 
