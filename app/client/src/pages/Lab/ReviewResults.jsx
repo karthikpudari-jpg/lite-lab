@@ -60,6 +60,7 @@ export default function ReviewResults({ group, focusSampleId, onClose, onSaved }
     return set;
   });
   const [busy, setBusy] = useState(false);
+  const [stage, setStage] = useState(''); // '' | 'saving' | 'verifying' | 'releasing' - drives the footer button's label while busy
   const [error, setError] = useState('');
 
   function enteredCount(sample) {
@@ -98,29 +99,38 @@ export default function ReviewResults({ group, focusSampleId, onClose, onSaved }
     setBusy(true);
     setError('');
     try {
-      for (const s of checkedSamples) {
+      // Every checked sample's call runs in parallel instead of one-by-one -
+      // with several tests checked, awaiting each sample's save/verify/release
+      // in sequence could take several seconds and look stuck with no
+      // feedback. The stage label below keeps the button honest about what's
+      // still happening while it works.
+      setStage('saving');
+      await Promise.all(checkedSamples.map((s) => {
         const params = paramsFor(s);
         const results = params.map((p) => ({ parameterId: p.id, value: (values[s.id]?.[p.id] || '').toString() }));
-        await api.post(`/lab/samples/${s.id}/results`, { results });
-      }
+        return api.post(`/lab/samples/${s.id}/results`, { results });
+      }));
+
       if (allCheckedReady) {
         if (allCheckedWereVerified) {
-          for (const s of checkedSamples) {
-            await api.post(`/lab/samples/${s.id}/verify`);
-            await api.post(`/lab/samples/${s.id}/release`);
-          }
+          setStage('verifying');
+          await Promise.all(checkedSamples.map((s) => api.post(`/lab/samples/${s.id}/verify`)));
+          setStage('releasing');
+          await Promise.all(checkedSamples.map((s) => api.post(`/lab/samples/${s.id}/release`)));
         } else {
-          for (const s of checkedSamples) {
-            if (s.status === 'RESULT_ENTERED' || s.status === 'COLLECTED') {
-              await api.post(`/lab/samples/${s.id}/verify`).catch(() => {});
-            }
-          }
+          setStage('verifying');
+          await Promise.all(checkedSamples.map((s) => (
+            ['RESULT_ENTERED', 'COLLECTED'].includes(s.status)
+              ? api.post(`/lab/samples/${s.id}/verify`).catch(() => {})
+              : Promise.resolve()
+          )));
         }
       }
       onSaved();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to save');
     } finally {
+      setStage('');
       setBusy(false);
     }
   }
@@ -259,7 +269,7 @@ export default function ReviewResults({ group, focusSampleId, onClose, onSaved }
         <span className="checked-count">{checkedSamples.length} of {eligibleSamples.length} test(s) checked</span>
         <button onClick={handleSubmit} disabled={busy || checkedSamples.length === 0}>
           {busy
-            ? (allCheckedWereVerified && allCheckedReady ? 'Releasing…' : 'Saving…')
+            ? { saving: 'Saving…', verifying: 'Verifying…', releasing: 'Releasing…' }[stage] || 'Saving…'
             : allCheckedReady
               ? (allCheckedWereVerified
                 ? `Release ${checkedSamples.length} Test${checkedSamples.length === 1 ? '' : 's'}`
