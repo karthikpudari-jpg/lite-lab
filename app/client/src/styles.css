@@ -700,8 +700,9 @@ input, select, textarea {
 .review-param-grid { display: flex; flex-direction: column; gap: 10px; }
 .review-param-card {
   background: #f8fafc; border-radius: 10px; padding: 14px 16px; display: flex; align-items: center;
-  justify-content: space-between; gap: 12px;
+  justify-content: flex-start; gap: 20px;
 }
+.review-param-card > div:first-child { min-width: 200px; max-width: 280px; flex-shrink: 0; }
 .review-param-card .p-name { font-weight: 700; font-size: 13px; color: #1a1a1a; }
 .review-param-card .p-range { font-size: 12px; color: #16a34a; font-weight: 600; margin-top: 2px; }
 .review-param-card .p-input-wrap { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
